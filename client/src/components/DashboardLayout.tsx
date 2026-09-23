@@ -23,7 +23,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { loading, user } = useAuth();
 
   useEffect(() => { localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString()); }, [sidebarWidth]);
-  if (loading) return <DashboardLayoutSkeleton />;
   useEffect(() => {
     if (!user || user.role === "admin") {
       setTutorialOpen(false);
@@ -32,6 +31,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setTutorialOpen(!isTutorialComplete());
   }, [user]);
 
+  if (loading) return <DashboardLayoutSkeleton />;
   if (!user) {
     return <div className="min-h-screen bg-[#f4f6f2] px-4 flex items-center justify-center">
       <div className="w-full max-w-md rounded-[2rem] border border-[#d9e3d5] bg-white p-9 text-center shadow-[0_18px_70px_rgba(18,54,41,.10)]">
