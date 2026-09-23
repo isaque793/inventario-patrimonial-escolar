@@ -1,5 +1,5 @@
 import { CheckCircle2, ChevronRight, GraduationCap } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { activateTutorial, completeTutorial } from "@/lib/tutorialSandbox";
 
@@ -111,6 +111,8 @@ export default function GuidedTutorial() {
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [inputReady, setInputReady] = useState(false);
+  const [tooltipHeight, setTooltipHeight] = useState(0);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const step = steps[stepIndex];
   const target = step.selector ? findTarget(step.id) : null;
 
@@ -132,12 +134,17 @@ export default function GuidedTutorial() {
     const update = () => refreshTarget(false);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener("resize", update);
+    visualViewport?.addEventListener("scroll", update);
     const observer = new MutationObserver(update);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      visualViewport?.removeEventListener("resize", update);
+      visualViewport?.removeEventListener("scroll", update);
     };
   }, [refreshTarget]);
 
@@ -202,37 +209,62 @@ export default function GuidedTutorial() {
     };
   }, [target, step.mode]);
 
+  useLayoutEffect(() => {
+    const element = tooltipRef.current;
+    if (!element) return;
+    const updateHeight = () => setTooltipHeight(element.getBoundingClientRect().height);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [step.id]);
+
   const continueStep = () => setStepIndex(index => Math.min(index + 1, steps.length - 1));
   const finish = () => { completeTutorial(); window.location.reload(); };
 
   const tooltipStyle = useMemo<React.CSSProperties>(() => {
-    if (!targetRect) return { left: "50%", top: "50%", width: "min(430px, calc(100vw - 32px))", transform: "translate(-50%, -50%)" };
-    const width = Math.min(390, window.innerWidth - 32);
+    const viewport = window.visualViewport;
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportTop = viewport?.offsetTop ?? 0;
+
+    if (!targetRect) {
+      return {
+        left: viewportLeft + viewportWidth / 2,
+        top: viewportTop + viewportHeight / 2,
+        width: Math.min(430, viewportWidth - 32),
+        transform: "translate(-50%, -50%)",
+      };
+    }
+
+    const width = Math.min(390, viewportWidth - 32);
+    const height = tooltipHeight || 220;
     const gap = 18;
     let left = targetRect.left + targetRect.width / 2 - width / 2;
     let top = targetRect.bottom + gap;
-    if (step.placement === "top") top = targetRect.top - 220 - gap;
+    if (step.placement === "top") top = targetRect.top - height - gap;
     if (step.placement === "left") { left = targetRect.left - width - gap; top = targetRect.top; }
     if (step.placement === "right") { left = targetRect.right + gap; top = targetRect.top; }
-    left = Math.max(16, Math.min(left, window.innerWidth - width - 16));
-    top = Math.max(16, Math.min(top, window.innerHeight - 230));
+    left = Math.max(viewportLeft + 16, Math.min(left, viewportLeft + viewportWidth - width - 16));
+    top = Math.max(viewportTop + 16, Math.min(top, viewportTop + viewportHeight - height - 16));
     return { left, top, width };
-  }, [step.placement, targetRect]);
+  }, [step.placement, targetRect, tooltipHeight]);
 
   const highlighted = Boolean(targetRect && step.selector);
 
   const tutorial = <>
     {highlighted && targetRect && <div className="pointer-events-none fixed inset-0" style={{ zIndex: 40 }}>
       <div className="pointer-events-auto absolute left-0 top-0 w-full bg-black/50" style={{ height: Math.max(targetRect.top - 8, 0) }} />
-      <div className="pointer-events-auto absolute bottom-0 left-0 w-full bg-black/50" style={{ height: Math.max(window.innerHeight - targetRect.bottom - 8, 0) }} />
+      <div className="pointer-events-auto absolute bottom-0 left-0 w-full bg-black/50" style={{ height: Math.max((window.visualViewport?.offsetTop ?? 0) + (window.visualViewport?.height ?? window.innerHeight) - targetRect.bottom - 8, 0) }} />
       <div className="pointer-events-auto absolute left-0 bg-black/50" style={{ top: Math.max(targetRect.top - 8, 0), width: Math.max(targetRect.left - 8, 0), height: targetRect.height + 16 }} />
-      <div className="pointer-events-auto absolute right-0 bg-black/50" style={{ top: Math.max(targetRect.top - 8, 0), width: Math.max(window.innerWidth - targetRect.right - 8, 0), height: targetRect.height + 16 }} />
+      <div className="pointer-events-auto absolute right-0 bg-black/50" style={{ top: Math.max(targetRect.top - 8, 0), width: Math.max((window.visualViewport?.offsetLeft ?? 0) + (window.visualViewport?.width ?? window.innerWidth) - targetRect.right - 8, 0), height: targetRect.height + 16 }} />
     </div>}
 
     {highlighted && targetRect && <div className="pointer-events-none fixed rounded-xl border-2 border-[#f2d98c] shadow-[0_0_28px_rgba(242,217,140,.45)]" style={{ left: targetRect.left - 5, top: targetRect.top - 5, width: targetRect.width + 10, height: targetRect.height + 10, zIndex: 100 }} />}
 
     <div className="pointer-events-auto fixed" style={{ ...tooltipStyle, zIndex: 1000 }}>
-      <div className="rounded-2xl border border-[#d8e3db] bg-white p-5 shadow-[0_22px_70px_rgba(15,45,35,.24)]">
+      <div ref={tooltipRef} className="rounded-2xl border border-[#d8e3db] bg-white p-5 shadow-[0_22px_70px_rgba(15,45,35,.24)]">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e8f2ea] text-[#1f5c48]"><GraduationCap className="size-5" /></div>
           <div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#6a8072]">Orientação</p><h2 className="mt-1 font-semibold text-[#173c31]">{step.title}</h2></div>
