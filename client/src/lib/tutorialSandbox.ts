@@ -14,6 +14,12 @@ export function activateTutorial(): void {
   localStorage.setItem(TUTORIAL_ACTIVE_KEY, "1");
 }
 
+export function restartTutorial(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
+  localStorage.setItem(TUTORIAL_ACTIVE_KEY, "1");
+}
+
 export function completeTutorial(): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(TUTORIAL_COMPLETE_KEY, "1");
