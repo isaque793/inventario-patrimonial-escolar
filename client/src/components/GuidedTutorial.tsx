@@ -130,6 +130,31 @@ export default function GuidedTutorial() {
   }, [step.id, step.mode, step.selector]);
 
   useEffect(() => {
+    if (step.id !== "start-cycle") return;
+
+    // Se o inventário já foi iniciado antes de abrir o manual novamente,
+    // o botão "Iniciar inventário" não existe mais. Nesse caso, pulamos
+    // automaticamente esta etapa e seguimos para "Adicionar item".
+    const checkAlreadyStarted = () => {
+      const startButton = findTarget("start-cycle");
+      const addItemButton = findTarget("add-item");
+      if (!startButton && addItemButton) {
+        setStepIndex(index => index + 1);
+        return true;
+      }
+      return false;
+    };
+
+    if (checkAlreadyStarted()) return;
+
+    const interval = window.setInterval(() => {
+      if (checkAlreadyStarted()) window.clearInterval(interval);
+    }, 150);
+
+    return () => window.clearInterval(interval);
+  }, [step.id]);
+
+  useEffect(() => {
     refreshTarget(true);
     const update = () => refreshTarget(false);
     window.addEventListener("resize", update);
