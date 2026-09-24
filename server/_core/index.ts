@@ -126,25 +126,14 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  registerStorageProxy(app);
-
   // Protect file access and API endpoints against request flooding.
+  // These middleware must run before the routes they protect.
   app.use("/api/storage", rateLimit(60, "storage"));
-  app.use(
-    "/api/trpc",
-    rateLimit(API_RATE_LIMIT, "api"),
-  );
+  app.use("/api/trpc", rateLimit(API_RATE_LIMIT, "api"));
+  app.use("/api/trpc/auth.login", rateLimit(AUTH_RATE_LIMIT, "auth-login"));
+  app.use("/api/trpc/auth.register", rateLimit(AUTH_RATE_LIMIT, "auth-register"));
 
-  // tRPC authentication endpoints get a much tighter per-IP limit to make
-  // password brute-force substantially harder.
-  app.use(
-    "/api/trpc/auth.login",
-    rateLimit(AUTH_RATE_LIMIT, "auth-login"),
-  );
-  app.use(
-    "/api/trpc/auth.register",
-    rateLimit(AUTH_RATE_LIMIT, "auth-register"),
-  );
+  registerStorageProxy(app);
 
   // tRPC API
   app.use(
@@ -170,7 +159,7 @@ async function startServer() {
   const port = await findAvailablePort(preferredPort);
 
   if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+    console.log(`Port ${preferredPort} is busy, using port ${port}`);
   }
 
   server.listen(port, () => {
