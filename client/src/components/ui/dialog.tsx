@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { isTutorialActive } from "@/lib/tutorialSandbox";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 import * as React from "react";
@@ -47,10 +46,6 @@ function Dialog({ onOpenChange, ...props }: React.ComponentProps<typeof DialogPr
 
   const handleOpenChange = React.useCallback(
     (open: boolean) => {
-      // During the guided tutorial the real dialogs must remain open while
-      // the user fills the highlighted fields. Successful saves still close
-      // them because the parent controls the `open` prop directly.
-      if (!open && isTutorialActive()) return;
       onOpenChange?.(open);
     },
     [onOpenChange]
