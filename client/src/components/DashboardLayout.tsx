@@ -5,12 +5,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
 import { getNavigationItemsForRole } from "@/lib/roleNavigation";
-import { activateTutorial, isTutorialComplete, restartTutorial, TUTORIAL_ACTIVE_KEY } from "@/lib/tutorialSandbox";
-import { BarChart3, Building2, ClipboardList, GraduationCap, LogOut, PanelLeft, ShieldCheck } from "lucide-react";
+import { BarChart3, Building2, ClipboardList, LogOut, PanelLeft, ShieldCheck } from "lucide-react";
 import React, { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
-import GuidedTutorial from "./GuidedTutorial";
 
 const SIDEBAR_WIDTH_KEY = "inventario-sidebar-width";
 const DEFAULT_WIDTH = 272;
@@ -19,17 +17,9 @@ const MAX_WIDTH = 370;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)) || DEFAULT_WIDTH);
-  const [tutorialOpen, setTutorialOpen] = useState(false);
   const { loading, user } = useAuth();
 
   useEffect(() => { localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString()); }, [sidebarWidth]);
-  useEffect(() => {
-    if (!user || user.role === "admin") {
-      setTutorialOpen(false);
-      return;
-    }
-    setTutorialOpen(!isTutorialComplete());
-  }, [user]);
 
   if (loading) return <DashboardLayoutSkeleton />;
   if (!user) {
@@ -43,18 +33,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>;
   }
 
-  if (tutorialOpen) activateTutorial();
-  else localStorage.removeItem(TUTORIAL_ACTIVE_KEY);
-
-  const reopenTutorial = () => {
-    restartTutorial();
-    setTutorialOpen(true);
-  };
-
-  return <SidebarProvider style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}><DashboardLayoutContent setSidebarWidth={setSidebarWidth} onReopenTutorial={reopenTutorial}>{children}</DashboardLayoutContent>{tutorialOpen && <GuidedTutorial />}</SidebarProvider>;
+  return <SidebarProvider style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}><DashboardLayoutContent setSidebarWidth={setSidebarWidth}>{children}</DashboardLayoutContent></SidebarProvider>;
 }
 
-function DashboardLayoutContent({ children, setSidebarWidth, onReopenTutorial }: { children: React.ReactNode; setSidebarWidth: (width: number) => void; onReopenTutorial: () => void }) {
+function DashboardLayoutContent({ children, setSidebarWidth }: { children: React.ReactNode; setSidebarWidth: (width: number) => void }) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
@@ -99,8 +81,7 @@ function DashboardLayoutContent({ children, setSidebarWidth, onReopenTutorial }:
           <DropdownMenu><DropdownMenuTrigger asChild><button className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d9c07c]">
             <Avatar className="size-9 border border-white/10"><AvatarFallback className="bg-[#255c4b] text-xs font-semibold text-white">{user?.name?.charAt(0).toUpperCase() || "U"}</AvatarFallback></Avatar>
             {!isCollapsed && <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-white">{user?.name || "Utilizador"}</p><p className="mt-0.5 truncate text-xs text-[#aac6b6]">{user?.role === "admin" ? "Equipa gestora" : "Escola"}</p></div>}
-          </button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48">{user?.role !== "admin" && <DropdownMenuItem onClick={onReopenTutorial} className="cursor-pointer"><GraduationCap className="mr-2 size-4" />Ver tutorial novamente</DropdownMenuItem>}
-            <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive"><LogOut className="mr-2 size-4" />Terminar sessão</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+          </button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive"><LogOut className="mr-2 size-4" />Terminar sessão</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
         </SidebarFooter>
       </Sidebar>
       {!isMobile && !isCollapsed && <div className="absolute right-0 top-0 z-50 h-full w-1 cursor-col-resize hover:bg-[#d9c07c]/60" onMouseDown={() => setIsResizing(true)} />}
