@@ -1,4 +1,5 @@
 import { useState, FormEvent } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ export default function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +43,12 @@ export default function Login() {
           <Input placeholder="Nome" value={name} onChange={e => setName(e.target.value)} />
         )}
         <Input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
-        <Input type="password" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} />
+        <div className="relative">
+          <Input type={showPassword ? "text" : "password"} placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} className="pr-10" />
+          <button type="button" onClick={() => setShowPassword(value => !value)} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} title={showPassword ? "Ocultar senha" : "Mostrar senha"}>
+            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
