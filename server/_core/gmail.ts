@@ -24,6 +24,10 @@ function base64UrlEncode(value: string): string {
     .replaceAll("=", "");
 }
 
+function encodeMimeHeader(value: string): string {
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
 function buildMimeMessage(input: {
   to: string;
   subject: string;
@@ -35,7 +39,7 @@ function buildMimeMessage(input: {
   const headers = [
     "MIME-Version: 1.0",
     `To: ${input.to}`,
-    `Subject: ${input.subject}`,
+    `Subject: ${encodeMimeHeader(input.subject)}`,
     "Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
   ].join("\r\n");
 
