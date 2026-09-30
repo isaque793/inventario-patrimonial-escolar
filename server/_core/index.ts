@@ -4,6 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerStorageProxy } from "./storageProxy";
+import { registerGoogleOAuth } from "./googleOAuth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -151,8 +152,10 @@ async function startServer() {
   app.use("/api/trpc", rateLimit(API_RATE_LIMIT, "api"));
   app.use("/api/trpc/auth.login", rateLimit(AUTH_RATE_LIMIT, "auth-login"));
   app.use("/api/trpc/auth.register", rateLimit(AUTH_RATE_LIMIT, "auth-register"));
+  app.use("/api/auth/google", rateLimit(AUTH_RATE_LIMIT, "google-oauth"));
 
   registerStorageProxy(app);
+  registerGoogleOAuth(app);
 
   // tRPC API
   app.use(
