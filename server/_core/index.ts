@@ -152,6 +152,8 @@ async function startServer() {
   app.use("/api/trpc", rateLimit(API_RATE_LIMIT, "api"));
   app.use("/api/trpc/auth.login", rateLimit(AUTH_RATE_LIMIT, "auth-login"));
   app.use("/api/trpc/auth.register", rateLimit(AUTH_RATE_LIMIT, "auth-register"));
+  app.use("/api/trpc/auth.requestPasswordReset", rateLimit(AUTH_RATE_LIMIT, "auth-reset-request"));
+  app.use("/api/trpc/auth.resetPassword", rateLimit(AUTH_RATE_LIMIT, "auth-reset-confirm"));
   app.use("/api/auth/google", rateLimit(AUTH_RATE_LIMIT, "google-oauth"));
 
   registerStorageProxy(app);
