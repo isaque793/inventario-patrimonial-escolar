@@ -56,6 +56,16 @@ export default function Login() {
           {mode === "login" ? "Entrar" : "Criar conta"}
         </Button>
 
+        {mode === "login" && (
+          <button
+            type="button"
+            onClick={() => navigate("/esqueci-senha")}
+            className="text-sm text-center w-full text-muted-foreground underline"
+          >
+            Esqueci minha senha
+          </button>
+        )}
+
         <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")} className="text-sm text-center w-full text-muted-foreground underline">
           {mode === "login" ? "Não tem conta? Criar uma" : "Já tem conta? Entrar"}
         </button>
