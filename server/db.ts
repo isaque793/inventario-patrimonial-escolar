@@ -1,5 +1,5 @@
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "crypto";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "crypto";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import {
@@ -9,6 +9,7 @@ import {
   inventoryIssues,
   inventoryItems,
   inventoryNotes,
+  passwordResetTokens,
   schoolMemberships,
   schools,
   users,
@@ -151,6 +152,81 @@ export async function verifyUserPassword(email: string, password: string) {
   const user = await getUserByEmail(email);
   if (!user || !user.passwordHash) return null;
   return verifyPasswordHash(password, user.passwordHash) ? user : null;
+}
+
+const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+
+function hashPasswordResetToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+export async function createPasswordResetToken(email: string) {
+  const db = await requireDb();
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await getUserByEmail(normalizedEmail);
+
+  if (!user) return null;
+
+  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id));
+
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = hashPasswordResetToken(token);
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+
+  await db.insert(passwordResetTokens).values({
+    userId: user.id,
+    tokenHash,
+    expiresAt,
+  });
+
+  return { email: normalizedEmail, token, expiresAt };
+}
+
+export async function resetPasswordWithToken(token: string, password: string): Promise<boolean> {
+  const db = await requireDb();
+  const tokenHash = hashPasswordResetToken(token);
+  const now = new Date();
+
+  return db.transaction(async tx => {
+    const rows = await tx
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+        ),
+      )
+      .limit(1);
+
+    const resetToken = rows[0];
+    if (!resetToken || resetToken.expiresAt.getTime() <= now.getTime()) {
+      return false;
+    }
+
+    const result = await tx
+      .update(users)
+      .set({
+        passwordHash: hashPassword(password),
+        updatedAt: now,
+        lastSignedIn: now,
+      })
+      .where(eq(users.id, resetToken.userId));
+
+    if (Number(result[0].affectedRows) !== 1) return false;
+
+    await tx
+      .update(passwordResetTokens)
+      .set({ usedAt: now })
+      .where(
+        and(
+          eq(passwordResetTokens.userId, resetToken.userId),
+          isNull(passwordResetTokens.usedAt),
+        ),
+      );
+
+    return true;
+  });
 }
 
 export async function requireDb() {
