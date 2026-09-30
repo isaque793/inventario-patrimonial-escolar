@@ -26,9 +26,13 @@ import {
   listAssignableUsers,
   requireDb,
   userCanAccessSchool,
+  createPasswordResetToken,
+  resetPasswordWithToken,
   linkUserToSchoolByEmail,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
+import { sendGmailMessage } from "./_core/gmail";
 import { createSessionToken } from "./_core/session";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { systemRouter } from "./_core/systemRouter";
@@ -113,6 +117,88 @@ export const appRouter = router({
         const token = await createSessionToken(user.id);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
         return user;
+      }),
+
+    requestPasswordReset: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ input, ctx }) => {
+        const reset = await createPasswordResetToken(input.email);
+
+        if (!reset) {
+          return { success: true } as const;
+        }
+
+        const forwardedProto = ctx.req.headers["x-forwarded-proto"];
+        const forwardedHost = ctx.req.headers["x-forwarded-host"];
+        const proto =
+          ENV.isProduction && typeof forwardedProto === "string"
+            ? forwardedProto.split(",")[0].trim()
+            : ctx.req.protocol;
+        const host =
+          typeof forwardedHost === "string"
+            ? forwardedHost.split(",")[0].trim()
+            : ctx.req.get("host");
+
+        if (!host) {
+          console.error("[Password Reset] Host da aplicação não disponível.");
+          return { success: true } as const;
+        }
+
+        const resetUrl = `${proto}://${host}/redefinir-senha?token=${encodeURIComponent(reset.token)}`;
+
+        try {
+          await sendGmailMessage({
+            to: reset.email,
+            subject: "Redefinição de senha — Inventário Patrimonial Escolar",
+            text: [
+              "Olá,",
+              "",
+              "Recebemos uma solicitação para redefinir a senha da sua conta no Inventário Patrimonial Escolar.",
+              "",
+              `Use este link para criar uma nova senha: ${resetUrl}`,
+              "",
+              "O link é válido por 30 minutos e pode ser usado apenas uma vez.",
+              "Se você não solicitou esta alteração, ignore esta mensagem.",
+              "",
+              "Inventário Patrimonial Escolar",
+            ].join("\n"),
+            html: `<!doctype html>
+<html lang="pt-BR">
+<body style="font-family:Arial,sans-serif;line-height:1.5;color:#1f2937">
+  <h2>Redefinição de senha</h2>
+  <p>Recebemos uma solicitação para redefinir a senha da sua conta no Inventário Patrimonial Escolar.</p>
+  <p><a href="${resetUrl}">Criar uma nova senha</a></p>
+  <p>O link é válido por <strong>30 minutos</strong> e pode ser usado apenas uma vez.</p>
+  <p>Se você não solicitou esta alteração, ignore esta mensagem.</p>
+  <p>Inventário Patrimonial Escolar</p>
+</body>
+</html>`,
+          });
+        } catch (error) {
+          console.error("[Password Reset] Falha ao enviar e-mail:", error);
+        }
+
+        return { success: true } as const;
+      }),
+
+    resetPassword: publicProcedure
+      .input(
+        z.object({
+          token: z.string().min(20).max(200),
+          password: z.string().min(8).max(128),
+        }),
+      )
+      .mutation(async ({ input }) => {
+        const success = await resetPasswordWithToken(input.token, input.password);
+
+        if (!success) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "O link de redefinição é inválido ou expirou.",
+          });
+        }
+
+        return { success: true } as const;
       }),
 
   logout: publicProcedure.mutation(({ ctx }) => {
