@@ -9,6 +9,8 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import AdminUsers from "./pages/AdminUsers";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Management from "./pages/ManagementExcel";
 import ManagementReview from "./pages/ManagementReview";
 import NotFound from "./pages/NotFound";
@@ -20,6 +22,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/esqueci-senha" component={ForgotPassword} />
+      <Route path="/redefinir-senha" component={ResetPassword} />
       <Route>
         <DashboardLayout>
           <Switch>
