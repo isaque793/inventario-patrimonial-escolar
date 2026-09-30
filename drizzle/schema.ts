@@ -24,6 +24,23 @@ export const users = mysqlTable("users", {
 });
 
 
+export const passwordResetTokens = mysqlTable(
+  "passwordResetTokens",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    usedAt: timestamp("usedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tokenHashIdx: uniqueIndex("password_reset_token_hash_unique").on(table.tokenHash),
+    userIdx: index("password_reset_user_idx").on(table.userId),
+    expiresIdx: index("password_reset_expires_idx").on(table.expiresAt),
+  }),
+);
+
 export const schools = mysqlTable(
   "schools",
   {
