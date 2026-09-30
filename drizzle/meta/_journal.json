@@ -50,6 +50,13 @@
       "when": 1789740849409,
       "tag": "0006_brown_vargas",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1790778600000,
+      "tag": "0007_password_reset_tokens",
+      "breakpoints": true
     }
   ]
 }
