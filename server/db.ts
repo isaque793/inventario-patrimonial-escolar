@@ -430,7 +430,15 @@ export async function linkUserToSchoolByEmail(userId: number, email?: string | n
 export async function getSchoolMembers(schoolId: number) {
   const db = await requireDb();
   return db
-    .select({ membership: schoolMemberships, user: users })
+    .select({
+      membership: schoolMemberships,
+      user: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+      },
+    })
     .from(schoolMemberships)
     .innerJoin(users, eq(schoolMemberships.userId, users.id))
     .where(eq(schoolMemberships.schoolId, schoolId));
