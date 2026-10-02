@@ -35,6 +35,7 @@ import { ENV } from "./_core/env";
 import { sendGmailMessage } from "./_core/gmail";
 import { createSessionToken } from "./_core/session";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import type { TrpcContext } from "./_core/context";
 import { systemRouter } from "./_core/systemRouter";
 import { storagePut } from "./storage";
 import { archiveCycle } from "./archiveService";
@@ -93,10 +94,19 @@ const schoolFields = {
   directorMasp: z.string().trim().max(32).optional().nullable(),
 };
 
+function toPublicUser(user: NonNullable<TrpcContext["user"]>) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  };
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => (opts.ctx.user ? toPublicUser(opts.ctx.user) : null)),
 
         register: publicProcedure
       .input(z.object({ email: z.string().email(), password: z.string().min(8), name: z.string().optional() }))
@@ -105,7 +115,7 @@ export const appRouter = router({
         await linkUserToSchoolByEmail(user!.id, user!.email);
         const token = await createSessionToken(user!.id);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
-        return user;
+        return toPublicUser(user!);
       }),
 
     login: publicProcedure
@@ -116,7 +126,7 @@ export const appRouter = router({
         await linkUserToSchoolByEmail(user.id, user.email);
         const token = await createSessionToken(user.id);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
-        return user;
+        return toPublicUser(user);
       }),
 
     requestPasswordReset: publicProcedure
