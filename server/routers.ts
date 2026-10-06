@@ -21,6 +21,9 @@ import {
   getManagementIssues,
   getManagementItems,
   getSchoolMembers,
+  getMyPendingSchoolAccessRequests,
+  getPendingSchoolAccessCounts,
+  getPendingSchoolAccessRequests,
   getSchoolOverview,
   getVisibleSchools,
   listAssignableUsers,
@@ -29,6 +32,9 @@ import {
   createPasswordResetToken,
   resetPasswordWithToken,
   linkUserToSchoolByEmail,
+  requestSchoolAccess,
+  reviewSchoolAccessRequest,
+  searchSchoolsForAccessRequest,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
@@ -242,6 +248,25 @@ export const appRouter = router({
       await assertSchoolAccess(ctx.user, input.schoolId);
       return getSchoolMembers(input.schoolId);
     }),
+    searchForAccess: protectedProcedure
+      .input(z.object({ query: z.string().trim().min(2).max(100) }))
+      .query(({ input }) => searchSchoolsForAccessRequest(input.query)),
+    myAccessRequests: protectedProcedure.query(({ ctx }) => getMyPendingSchoolAccessRequests(ctx.user.id)),
+    requestAccess: protectedProcedure
+      .input(z.object({ schoolId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role === "admin") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "A equipa gestora já possui acesso a todas as escolas." });
+        }
+        return requestSchoolAccess(ctx.user.id, input.schoolId);
+      }),
+    pendingAccessRequests: adminProcedure
+      .input(schoolInput)
+      .query(({ input }) => getPendingSchoolAccessRequests(input.schoolId)),
+    pendingAccessCounts: adminProcedure.query(() => getPendingSchoolAccessCounts()),
+    reviewAccessRequest: adminProcedure
+      .input(z.object({ requestId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]) }))
+      .mutation(async ({ ctx, input }) => reviewSchoolAccessRequest(input.requestId, ctx.user.id, input.decision)),
     listAssignableUsers: adminProcedure.query(() => listAssignableUsers()),
     assignUser: adminProcedure
       .input(z.object({ schoolId: z.number().int().positive(), userId: z.number().int().positive(), accessRole: z.enum(["coordinator", "contributor"]) }))
