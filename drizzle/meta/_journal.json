@@ -57,6 +57,13 @@
       "when": 1790778600000,
       "tag": "0007_password_reset_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1791289200000,
+      "tag": "0008_school_access_requests",
+      "breakpoints": true
     }
   ]
 }
