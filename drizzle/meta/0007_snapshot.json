@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "8c3d6f3a-6e5b-4d91-8a20-000000000008",
-  "prevId": "7f3c6b6e-7f1a-4a61-9f7e-000000000007",
+  "id": "7f3c6b6e-7f1a-4a61-9f7e-000000000007",
+  "prevId": "c07f1a9f-ac2e-450f-9a1e-2f2a12f213ae",
   "tables": {
     "committeeMembers": {
       "name": "committeeMembers",
@@ -1149,108 +1149,6 @@
           ]
         }
       },
-      "checkConstraint": {}
-    },
-    "schoolAccessRequests": {
-      "name": "schoolAccessRequests",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "schoolId": {
-          "name": "schoolId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "userId": {
-          "name": "userId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "enum('pending','approved','rejected')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        },
-        "reviewedAt": {
-          "name": "reviewedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reviewedByUserId": {
-          "name": "reviewedByUserId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "access_request_school_user_unique": {
-          "name": "access_request_school_user_unique",
-          "columns": [
-            "schoolId",
-            "userId"
-          ],
-          "isUnique": true
-        },
-        "access_request_school_status_idx": {
-          "name": "access_request_school_status_idx",
-          "columns": [
-            "schoolId",
-            "status"
-          ],
-          "isUnique": false
-        },
-        "access_request_user_status_idx": {
-          "name": "access_request_user_status_idx",
-          "columns": [
-            "userId",
-            "status"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "schoolAccessRequests_id": {
-          "name": "schoolAccessRequests_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
       "checkConstraint": {}
     }
   },
