@@ -11,6 +11,7 @@ import {
   inventoryNotes,
   passwordResetTokens,
   schoolMemberships,
+  schoolAccessRequests,
   schools,
   users,
   validationHistory,
@@ -425,6 +426,113 @@ export async function linkUserToSchoolByEmail(userId: number, email?: string | n
     .onDuplicateKeyUpdate({ set: { schoolId: school.id } });
 
   return school.id;
+}
+
+export async function searchSchoolsForAccessRequest(query: string) {
+  const db = await requireDb();
+  const term = query.trim().toLowerCase();
+  if (!term) return [];
+  const pattern = `%${term}%`;
+  return db
+    .select({
+      id: schools.id,
+      name: schools.name,
+      schoolCode: schools.schoolCode,
+      city: schools.city,
+      regionalOffice: schools.regionalOffice,
+    })
+    .from(schools)
+    .where(
+      sql`lower(${schools.name}) like ${pattern}
+        or lower(coalesce(${schools.schoolCode}, '')) like ${pattern}
+        or lower(coalesce(${schools.city}, '')) like ${pattern}`,
+    )
+    .orderBy(asc(schools.name))
+    .limit(20);
+}
+
+export async function requestSchoolAccess(userId: number, schoolId: number) {
+  const db = await requireDb();
+  const school = (await db.select({ id: schools.id, name: schools.name }).from(schools).where(eq(schools.id, schoolId)).limit(1))[0];
+  if (!school) throw new Error("Escola não encontrada.");
+
+  const membership = await findSchoolMember(schoolId, userId);
+  if (membership) return { status: "approved" as const, school };
+
+  const existing = (await db
+    .select()
+    .from(schoolAccessRequests)
+    .where(and(eq(schoolAccessRequests.schoolId, schoolId), eq(schoolAccessRequests.userId, userId)))
+    .limit(1))[0];
+
+  if (existing?.status === "pending") return { status: "pending" as const, school };
+  if (existing?.status === "approved") return { status: "approved" as const, school };
+
+  if (existing) {
+    await db.update(schoolAccessRequests)
+      .set({ status: "pending", reviewedAt: null, reviewedByUserId: null, updatedAt: new Date() })
+      .where(eq(schoolAccessRequests.id, existing.id));
+  } else {
+    await db.insert(schoolAccessRequests).values({ schoolId, userId, status: "pending" });
+  }
+
+  return { status: "pending" as const, school };
+}
+
+export async function getPendingSchoolAccessRequests(schoolId: number) {
+  const db = await requireDb();
+  return db
+    .select({
+      request: schoolAccessRequests,
+      user: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
+    })
+    .from(schoolAccessRequests)
+    .innerJoin(users, eq(schoolAccessRequests.userId, users.id))
+    .where(and(eq(schoolAccessRequests.schoolId, schoolId), eq(schoolAccessRequests.status, "pending")))
+    .orderBy(asc(schoolAccessRequests.createdAt));
+}
+
+export async function getPendingSchoolAccessCounts() {
+  const db = await requireDb();
+  const rows = await db
+    .select({
+      schoolId: schoolAccessRequests.schoolId,
+      count: sql<number>`count(*)`,
+    })
+    .from(schoolAccessRequests)
+    .where(eq(schoolAccessRequests.status, "pending"))
+    .groupBy(schoolAccessRequests.schoolId);
+  return Object.fromEntries(rows.map(row => [row.schoolId, Number(row.count)]));
+}
+
+export async function reviewSchoolAccessRequest(requestId: number, reviewerId: number, decision: "approved" | "rejected") {
+  const db = await requireDb();
+  const request = (await db.select().from(schoolAccessRequests).where(eq(schoolAccessRequests.id, requestId)).limit(1))[0];
+  if (!request) throw new Error("Solicitação não encontrada.");
+
+  return db.transaction(async tx => {
+    if (request.status !== "pending") {
+      return { status: request.status, schoolId: request.schoolId, userId: request.userId };
+    }
+
+    if (decision === "approved") {
+      await tx
+        .insert(schoolMemberships)
+        .values({ schoolId: request.schoolId, userId: request.userId, accessRole: "contributor" })
+        .onDuplicateKeyUpdate({ set: { schoolId: request.schoolId } });
+    }
+
+    await tx
+      .update(schoolAccessRequests)
+      .set({ status: decision, reviewedAt: new Date(), reviewedByUserId: reviewerId, updatedAt: new Date() })
+      .where(eq(schoolAccessRequests.id, requestId));
+
+    return { status: decision, schoolId: request.schoolId, userId: request.userId };
+  });
 }
 
 export async function getSchoolMembers(schoolId: number) {
