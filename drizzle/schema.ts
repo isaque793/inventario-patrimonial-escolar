@@ -83,6 +83,25 @@ export const schoolMemberships = mysqlTable(
   }),
 );
 
+export const schoolAccessRequests = mysqlTable(
+  "schoolAccessRequests",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    schoolId: int("schoolId").notNull(),
+    userId: int("userId").notNull(),
+    status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    reviewedAt: timestamp("reviewedAt"),
+    reviewedByUserId: int("reviewedByUserId"),
+  },
+  table => ({
+    schoolUserUnique: uniqueIndex("access_request_school_user_unique").on(table.schoolId, table.userId),
+    schoolStatusIdx: index("access_request_school_status_idx").on(table.schoolId, table.status),
+    userStatusIdx: index("access_request_user_status_idx").on(table.userId, table.status),
+  }),
+);
+
 export const inventoryCycles = mysqlTable(
   "inventoryCycles",
   {
