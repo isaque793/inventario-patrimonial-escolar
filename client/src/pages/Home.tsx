@@ -210,7 +210,8 @@ function NotesDialog({ open, onOpenChange, notes, setNotes, pending, onSave }: {
 
 function SchoolAccessRequestPanel({ pendingRequests, pending, onRequest }: { pendingRequests: any[]; pending: boolean; onRequest: (schoolId: number) => void }) {
   const [query, setQuery] = useState("");
-  const searchQuery = trpc.school.searchForAccess.useQuery({ query: query.trim() }, { enabled: query.trim().length >= 2 });
+  const searchTerm = query.trim();
+  const searchQuery = trpc.school.searchForAccess.useQuery({ query: searchTerm.length >= 2 ? searchTerm : "__" }, { enabled: searchTerm.length >= 2 });
   const requestedIds = new Set((pendingRequests ?? []).map((entry: any) => entry.request.schoolId));
   return <Card className="mx-auto max-w-3xl border-[#dce7dc] bg-white shadow-[0_8px_30px_rgba(19,61,45,.05)]">
     <CardContent className="p-6 md:p-8">
