@@ -94,8 +94,24 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
   const createCycle = trpc.inventory.createCycle.useMutation({ onSuccess: () => { toast.success("Ciclo de inventário criado."); void overviewQuery.refetch(); } });
   const createSchool = trpc.school.create.useMutation({ onSuccess: async school => { toast.success("Escola registada."); await utils.school.list.invalidate(); setSchoolId(school.id); setSchoolDialog(false); } });
   const updateSchool = trpc.school.update.useMutation({ onSuccess: async () => { toast.success("Dados institucionais atualizados."); await Promise.all([utils.school.list.invalidate(), overviewQuery.refetch()]); setSchoolDialog(false); } });
-  const addItem = trpc.inventory.addItem.useMutation({ onSuccess: async () => { toast.success("Item patrimonial incluído."); setItemDialog(false); setEditingItem(null); await overviewQuery.refetch(); } });
-  const updateItem = trpc.inventory.updateItem.useMutation({ onSuccess: async () => { toast.success("Item patrimonial atualizado."); setItemDialog(false); setEditingItem(null); await overviewQuery.refetch(); } });
+  const addItem = trpc.inventory.addItem.useMutation({
+    onSuccess: async () => {
+      toast.success("Item patrimonial incluído.");
+      setItemDialog(false);
+      setEditingItem(null);
+      await overviewQuery.refetch();
+    },
+    onError: error => toast.error(error.message || "Não foi possível incluir este patrimônio."),
+  });
+  const updateItem = trpc.inventory.updateItem.useMutation({
+    onSuccess: async () => {
+      toast.success("Item patrimonial atualizado.");
+      setItemDialog(false);
+      setEditingItem(null);
+      await overviewQuery.refetch();
+    },
+    onError: error => toast.error(error.message || "Não foi possível atualizar este patrimônio."),
+  });
   const deleteItem = trpc.inventory.deleteItem.useMutation({ onSuccess: () => { toast.success("Item removido."); void overviewQuery.refetch(); } });
   const addIssue = trpc.inventory.addIssue.useMutation({ onSuccess: async () => { toast.success("Pendência registada."); setIssueDialog(false); await overviewQuery.refetch(); } });
   const deleteIssue = trpc.inventory.deleteIssue.useMutation({ onSuccess: () => { toast.success("Pendência removida."); void overviewQuery.refetch(); } });
