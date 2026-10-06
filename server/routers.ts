@@ -336,6 +336,29 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await assertEditableCycle(ctx.user, input.cycleId);
         const db = await requireDb();
+
+        // O número patrimonial identifica o bem dentro do inventário da escola.
+        // "Não se aplica" é uma exceção válida e pode aparecer em mais de um item.
+        if (input.propertyNumber !== "Não se aplica") {
+          const existing = await db
+            .select({ id: inventoryItems.id })
+            .from(inventoryItems)
+            .where(
+              and(
+                eq(inventoryItems.cycleId, input.cycleId),
+                eq(inventoryItems.propertyNumber, input.propertyNumber),
+              ),
+            )
+            .limit(1);
+
+          if (existing[0]) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: `Já existe um patrimônio com o número "${input.propertyNumber}" neste inventário.`,
+            });
+          }
+        }
+
         const { unitValue, quantity, ...fields } = input;
         const totalValue = calculateLineTotal(quantity, unitValue);
         const result = await db.insert(inventoryItems).values({ ...fields, quantity, unitValue: unitValue.toFixed(2), totalValue });
@@ -363,6 +386,29 @@ export const appRouter = router({
         const item = await db.select().from(inventoryItems).where(eq(inventoryItems.id, input.itemId)).limit(1);
         if (!item[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
         if (item[0].cycleId !== cycle.id) throw accessDenied();
+
+        // Ao editar, o próprio registro atual não conta como duplicado.
+        // "Não se aplica" continua podendo ser usado por vários itens.
+        if (input.propertyNumber !== "Não se aplica") {
+          const duplicate = await db
+            .select({ id: inventoryItems.id })
+            .from(inventoryItems)
+            .where(
+              and(
+                eq(inventoryItems.cycleId, cycle.id),
+                eq(inventoryItems.propertyNumber, input.propertyNumber),
+              ),
+            )
+            .limit(2);
+
+          if (duplicate.some(entry => entry.id !== input.itemId)) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: `Já existe um patrimônio com o número "${input.propertyNumber}" neste inventário.`,
+            });
+          }
+        }
+
         const { itemId, cycleId, unitValue, quantity, ...fields } = input;
         const totalValue = calculateLineTotal(quantity, unitValue);
         await db.update(inventoryItems).set({ ...fields, cycleId, quantity, unitValue: unitValue.toFixed(2), totalValue }).where(eq(inventoryItems.id, itemId));
