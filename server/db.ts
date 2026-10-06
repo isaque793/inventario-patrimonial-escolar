@@ -479,6 +479,23 @@ export async function requestSchoolAccess(userId: number, schoolId: number) {
   return { status: "pending" as const, school };
 }
 
+export async function getMyPendingSchoolAccessRequests(userId: number) {
+  const db = await requireDb();
+  return db
+    .select({
+      request: schoolAccessRequests,
+      school: {
+        id: schools.id,
+        name: schools.name,
+        city: schools.city,
+      },
+    })
+    .from(schoolAccessRequests)
+    .innerJoin(schools, eq(schoolAccessRequests.schoolId, schools.id))
+    .where(and(eq(schoolAccessRequests.userId, userId), eq(schoolAccessRequests.status, "pending")))
+    .orderBy(asc(schools.name));
+}
+
 export async function getPendingSchoolAccessRequests(schoolId: number) {
   const db = await requireDb();
   return db
