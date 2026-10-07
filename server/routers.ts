@@ -337,6 +337,7 @@ export const appRouter = router({
           pending: z.object({
             issueType: z.enum(["not_found", "outside_register", "new_equipment", "transfer", "donation", "guard_term", "other"]),
             pendingDescription: z.string().trim().min(2).max(4000),
+            sei: z.string().trim().max(120).optional().nullable(),
           }).optional().nullable(),
         }),
       )
@@ -391,6 +392,7 @@ export const appRouter = router({
               originBody: null,
               currentSituation: fields.currentSituation,
               pendingDescription: pending.pendingDescription,
+              sei: pending.sei ?? null,
               measuresTaken: null,
               resolutionStatus: "open",
             });
@@ -473,6 +475,7 @@ export const appRouter = router({
           originBody: z.string().trim().max(255).optional().nullable(),
           currentSituation: z.string().trim().max(160).optional().nullable(),
           pendingDescription: z.string().trim().min(2).max(4000),
+          sei: z.string().trim().max(120).optional().nullable(),
           measuresTaken: z.string().trim().max(4000).optional().nullable(),
           resolutionStatus: z.enum(["open", "in_progress", "resolved"]),
         }),
