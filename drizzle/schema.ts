@@ -193,6 +193,7 @@ export const inventoryIssues = mysqlTable(
     originBody: varchar("originBody", { length: 255 }),
     currentSituation: varchar("currentSituation", { length: 160 }),
     pendingDescription: text("pendingDescription").notNull(),
+    sei: varchar("sei", { length: 120 }),
     measuresTaken: text("measuresTaken"),
     resolutionStatus: mysqlEnum("resolutionStatus", ["open", "in_progress", "resolved"])
       .default("open")
