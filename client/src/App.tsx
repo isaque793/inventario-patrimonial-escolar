@@ -7,6 +7,7 @@ import { AdminGuard } from "./components/AdminGuard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import AdminUsers from "./pages/AdminUsers";
+import AccessRequests from "./pages/AccessRequests";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -18,6 +19,7 @@ import NotFound from "./pages/NotFound";
 function ManagementRoute() { return <AdminGuard><Management /></AdminGuard>; }
 function ManagementReviewRoute() { return <AdminGuard><ManagementReview /></AdminGuard>; }
 function AdministratorsRoute() { return <AdminGuard><AdminUsers /></AdminGuard>; }
+function AccessRequestsRoute() { return <AdminGuard><AccessRequests /></AdminGuard>; }
 function Router() {
   return (
     <Switch>
@@ -31,6 +33,7 @@ function Router() {
             <Route path="/gestao" component={ManagementRoute} />
             <Route path="/gestao/analise/:cycleId" component={ManagementReviewRoute} />
             <Route path="/administradores" component={AdministratorsRoute} />
+            <Route path="/solicitacoes-acesso" component={AccessRequestsRoute} />
             <Route path="/404" component={NotFound} />
             <Route component={NotFound} />
           </Switch>
