@@ -24,6 +24,7 @@ import {
   getMyPendingSchoolAccessRequests,
   getPendingSchoolAccessCounts,
   getPendingSchoolAccessRequests,
+  getAllPendingSchoolAccessRequests,
   getSchoolOverview,
   getVisibleSchools,
   listAssignableUsers,
@@ -263,6 +264,8 @@ export const appRouter = router({
     pendingAccessRequests: adminProcedure
       .input(schoolInput)
       .query(({ input }) => getPendingSchoolAccessRequests(input.schoolId)),
+    allPendingAccessRequests: adminProcedure
+      .query(() => getAllPendingSchoolAccessRequests()),
     pendingAccessCounts: adminProcedure.query(() => getPendingSchoolAccessCounts()),
     reviewAccessRequest: adminProcedure
       .input(z.object({ requestId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]) }))
