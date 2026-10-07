@@ -331,6 +331,10 @@ export const appRouter = router({
           conservationState: z.string().trim().min(2).max(80),
           unitValue: z.number().min(0).max(999999999),
           currentSituation: z.string().trim().min(2).max(160),
+          pending: z.object({
+            issueType: z.enum(["not_found", "outside_register", "new_equipment", "transfer", "donation", "guard_term", "other"]),
+            pendingDescription: z.string().trim().min(2).max(4000),
+          }).optional().nullable(),
         }),
       )
       .mutation(async ({ ctx, input }) => {
@@ -339,30 +343,60 @@ export const appRouter = router({
 
         // O número patrimonial identifica o bem dentro do inventário da escola.
         // "Não se aplica" é uma exceção válida e pode aparecer em mais de um item.
-        if (input.propertyNumber !== "Não se aplica") {
-          const existing = await db
-            .select({ id: inventoryItems.id })
-            .from(inventoryItems)
-            .where(
-              and(
-                eq(inventoryItems.cycleId, input.cycleId),
-                eq(inventoryItems.propertyNumber, input.propertyNumber),
-              ),
-            )
-            .limit(1);
+        const { unitValue, quantity, pending, ...fields } = input;
+        const totalValue = calculateLineTotal(quantity, unitValue);
 
-          if (existing[0]) {
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: `Já existe um patrimônio com o número "${input.propertyNumber}" neste inventário.`,
+        const result = await db.transaction(async tx => {
+          if (input.propertyNumber !== "Não se aplica") {
+            const existing = await tx
+              .select({ id: inventoryItems.id })
+              .from(inventoryItems)
+              .where(
+                and(
+                  eq(inventoryItems.cycleId, input.cycleId),
+                  eq(inventoryItems.propertyNumber, input.propertyNumber),
+                ),
+              )
+              .limit(1);
+
+            if (existing[0]) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: `Já existe um patrimônio com o número "${input.propertyNumber}" neste inventário.`,
+              });
+            }
+          }
+
+          const itemResult = await tx.insert(inventoryItems).values({
+            ...fields,
+            quantity,
+            unitValue: unitValue.toFixed(2),
+            totalValue,
+          });
+          const itemId = Number(itemResult[0].insertId);
+
+          if (pending) {
+            await tx.insert(inventoryIssues).values({
+              cycleId: input.cycleId,
+              issueType: pending.issueType,
+              propertyNumber: input.propertyNumber,
+              quantity,
+              description: fields.description,
+              conservationState: fields.conservationState,
+              location: null,
+              totalValue,
+              originBody: null,
+              currentSituation: fields.currentSituation,
+              pendingDescription: pending.pendingDescription,
+              measuresTaken: null,
+              resolutionStatus: "open",
             });
           }
-        }
 
-        const { unitValue, quantity, ...fields } = input;
-        const totalValue = calculateLineTotal(quantity, unitValue);
-        const result = await db.insert(inventoryItems).values({ ...fields, quantity, unitValue: unitValue.toFixed(2), totalValue });
-        return { id: Number(result[0].insertId), totalValue };
+          return { id: itemId, totalValue };
+        });
+
+        return result;
       }),
     updateItem: protectedProcedure
       .input(
