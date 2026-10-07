@@ -187,7 +187,7 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
           <div className="space-y-6"><InventoryItemsCard items={overview.items} categories={categoriesQuery.data ?? []} editable={editable} onAdd={() => { setEditingItem(null); setItemDialog(true); }} onEdit={item => { setEditingItem(item); setItemDialog(true); }} onDelete={id => deleteItem.mutate({ itemId: id })} /><IssuesCard issues={overview.issues} editable={editable} onDelete={id => deleteIssue.mutate({ issueId: id })} /><NotesCard notes={overview.notes} editable={editable} onEdit={openNotes} /></div>
           <div className="space-y-6"><CommitteeCard members={overview.members} editable={editable} onEdit={openCommittee} /><DocumentsCard documents={overview.documents} editable={editable} uploading={uploadDocument.isPending} onUpload={handleFile} onRemove={id => removeDocument.mutate({ documentId: id })} /><ValidationCard cycle={cycle} history={overview.history} /></div>
           </div>
-        </div></>}
+        </>}
       </>}
     </>}
     <SchoolFormDialog open={schoolDialog} onOpenChange={setSchoolDialog} school={editingSchool} pending={createSchool.isPending || updateSchool.isPending} onSave={fields => { if (editingSchool) updateSchool.mutate({ schoolId: editingSchool.id, ...fields }); else createSchool.mutate(fields); }} />
