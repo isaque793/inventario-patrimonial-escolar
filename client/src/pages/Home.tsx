@@ -128,6 +128,24 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
   const editable = cycle?.status === "draft" || cycle?.status === "returned";
   const canCreateCycle = Boolean(schoolId && !cycle);
   const totalValue = overview?.items?.reduce((sum: number, item: any) => sum + Number(item.totalValue), 0) ?? 0;
+  const schoolConsolidated = useMemo(() => {
+    const categoryNames = Object.fromEntries((categoriesQuery.data ?? []).map((category: any) => [category.code, category.label]));
+    const grouped = new Map<string, { expenseCode: string; element: string; quantity: number; totalValue: number }>();
+    for (const item of overview?.items ?? []) {
+      const expenseCode = String(item.expenseCode ?? "");
+      if (!expenseCode) continue;
+      const current = grouped.get(expenseCode) ?? {
+        expenseCode,
+        element: categoryNames[expenseCode] || "",
+        quantity: 0,
+        totalValue: 0,
+      };
+      current.quantity += Number(item.quantity ?? 0);
+      current.totalValue += Number(item.totalValue ?? 0);
+      grouped.set(expenseCode, current);
+    }
+    return Array.from(grouped.values()).sort((a, b) => a.expenseCode.localeCompare(b.expenseCode, undefined, { numeric: true }));
+  }, [overview?.items, categoriesQuery.data]);
   const documentTypes = new Set(overview?.documents?.map((document: any) => document.documentType));
   const completion = [Boolean(cycle), (overview?.members?.length ?? 0) >= 1, (overview?.items?.length ?? 0) > 0, documentTypes.size === 3].filter(Boolean).length;
   const submissionRequirements = getInventorySubmissionRequirements({ itemCount: overview?.items?.length ?? 0, memberCount: overview?.members?.length ?? 0, documentTypes });
@@ -163,10 +181,13 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
         <Card className="overflow-hidden border-[#dce7dc] bg-white shadow-[0_8px_30px_rgba(19,61,45,.05)]"><CardContent className="grid gap-0 p-0 lg:grid-cols-[1.2fr_.8fr]"><div className="p-6 md:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><p className="text-[11px] font-bold uppercase tracking-[.17em] text-[#5d7667]">{year} · Carga patrimonial</p>{cycle && <StatusBadge status={cycle.status} />}</div><h2 className="mt-2 font-serif text-2xl font-semibold text-[#173b30]">{overview.school.name}</h2><p className="mt-2 text-sm text-[#62756a]">{overview.school.city || "Município não informado"}{overview.school.regionalOffice ? ` · ${overview.school.regionalOffice}` : ""}</p></div><div className="flex gap-2">{isManager && <Button variant="outline" onClick={() => { setEditingSchool(overview.school); setSchoolDialog(true); }}><PencilLine className="mr-2 size-4" />Editar</Button>}{isManager && <Button variant="outline" onClick={() => setAccessDialog(true)}><UsersRound className="mr-2 size-4" />Acessos</Button>}</div></div>
           <div className="mt-7 grid grid-cols-2 gap-3 md:grid-cols-4"><MiniStat label="Itens" value={String(overview.items?.length ?? 0)} /><MiniStat label="Valor registrado" value={money(totalValue)} /><MiniStat label="Pendências" value={String(overview.issues?.filter((issue: any) => issue.resolutionStatus !== "resolved").length ?? 0)} /><MiniStat label="Documentos" value={`${documentTypes.size}/3`} /></div>
         </div><div className="bg-[#123f34] p-6 text-white md:p-8"><p className="text-xs font-bold uppercase tracking-[.16em] text-[#bad2c2]">Progresso de submissão</p><p className="mt-3 font-serif text-4xl font-semibold">{Math.round((completion / 4) * 100)}%</p><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-[#d9c07c]" style={{ width: `${(completion / 4) * 100}%` }} /></div><p className="mt-4 text-sm leading-6 text-[#c7d8cd]">Inclua itens, um ou mais integrantes da subcomissão e os documentos assinados para enviar o inventário.</p>{cycle && editable && !submissionRequirements.ready && <div role="alert" className="mt-4 rounded-xl border border-amber-200/30 bg-white/10 px-3 py-3"><p className="text-xs font-bold uppercase tracking-[.12em] text-[#f0d98f]">Exigências pendentes</p><ul className="mt-2 space-y-1 text-xs leading-5 text-[#e2eee5]">{submissionRequirements.missing.map(requirement => <li key={requirement}>• {requirement}</li>)}</ul></div>}{canCreateCycle ? <Button onClick={() => schoolId && createCycle.mutate({ schoolId, year })} disabled={createCycle.isPending} className="mt-6 w-full bg-[#d9c07c] text-[#17372f] hover:bg-[#ead38f]"><Plus className="mr-2 size-4" />Iniciar inventário {year}</Button> : cycle && editable ? <Button onClick={handleSubmit} disabled={submitCycle.isPending} className="mt-6 w-full bg-[#d9c07c] text-[#17372f] hover:bg-[#ead38f]">{submitCycle.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}{submissionRequirements.ready ? "Submeter para validação" : "Concluir exigências para submeter"}</Button> : cycle ? <div className="mt-6 rounded-xl bg-white/10 px-3 py-3 text-sm text-[#dbe9df]">{cycle.status === "returned" ? "Corrija os apontamentos da equipe gestora e submeta novamente." : "A equipe gestora está acompanhando este inventário."}</div> : null}</div></CardContent></Card>
-        {cycle && <div className="grid gap-6 xl:grid-cols-[1.45fr_.85fr]">
+        {cycle && <>
+          <SchoolConsolidatedCard rows={schoolConsolidated} totalValue={totalValue} />
+          <div className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_.85fr]">
           <div className="space-y-6"><InventoryItemsCard items={overview.items} categories={categoriesQuery.data ?? []} editable={editable} onAdd={() => { setEditingItem(null); setItemDialog(true); }} onEdit={item => { setEditingItem(item); setItemDialog(true); }} onDelete={id => deleteItem.mutate({ itemId: id })} /><IssuesCard issues={overview.issues} editable={editable} onDelete={id => deleteIssue.mutate({ issueId: id })} /><NotesCard notes={overview.notes} editable={editable} onEdit={openNotes} /></div>
           <div className="space-y-6"><CommitteeCard members={overview.members} editable={editable} onEdit={openCommittee} /><DocumentsCard documents={overview.documents} editable={editable} uploading={uploadDocument.isPending} onUpload={handleFile} onRemove={id => removeDocument.mutate({ documentId: id })} /><ValidationCard cycle={cycle} history={overview.history} /></div>
-        </div>}
+          </div>
+        </div></>}
       </>}
     </>}
     <SchoolFormDialog open={schoolDialog} onOpenChange={setSchoolDialog} school={editingSchool} pending={createSchool.isPending || updateSchool.isPending} onSave={fields => { if (editingSchool) updateSchool.mutate({ schoolId: editingSchool.id, ...fields }); else createSchool.mutate(fields); }} />
@@ -179,6 +200,46 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
 
 function MiniStat({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-[#e1e9e2] bg-[#fbfdf9] px-3 py-3"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#728378]">{label}</p><p className="mt-1 truncate text-lg font-semibold text-[#24473a]">{value}</p></div>; }
 function LoadingPanel() { return <div className="flex min-h-56 items-center justify-center rounded-2xl border border-[#dce7dc] bg-white"><Loader2 className="size-6 animate-spin text-[#2d6a51]" /></div>; }
+
+function SchoolConsolidatedCard({ rows, totalValue }: { rows: Array<{ expenseCode: string; element: string; quantity: number; totalValue: number }>; totalValue: number }) {
+  return <Card className="overflow-hidden border-[#dce7dc] bg-white shadow-[0_8px_30px_rgba(19,61,45,.05)]">
+    <CardContent className="p-0">
+      <div className="flex flex-wrap items-start justify-between gap-3 p-5 pb-4">
+        <div>
+          <h2 className="font-semibold text-[#203f33]">Resumo consolidado</h2>
+          <p className="mt-0.5 text-xs leading-5 text-[#6b7d72]">Quantidade e valores por código de despesa desta escola.</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] text-sm">
+          <thead className="border-y border-[#e4ece5] bg-[#f7faf6] text-[10px] font-bold uppercase tracking-[.1em] text-[#6c7e72]">
+            <tr>
+              <th className="px-5 py-3 text-left">Código</th>
+              <th className="px-4 py-3 text-left">Elemento</th>
+              <th className="px-4 py-3 text-right">Qtd.</th>
+              <th className="px-5 py-3 text-right">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => <tr key={row.expenseCode} className="border-b border-[#edf2ed]">
+              <td className="px-5 py-3 font-mono text-xs font-semibold text-[#245b48]">{row.expenseCode}</td>
+              <td className="px-4 py-3 text-xs text-[#52675b]">{row.element}</td>
+              <td className="px-4 py-3 text-right">{row.quantity}</td>
+              <td className="px-5 py-3 text-right font-semibold text-[#24483a]">{money(row.totalValue)}</td>
+            </tr>)}
+            {!rows.length && <tr><td colSpan={4} className="px-5 py-10 text-center text-sm text-[#718277]">Os dados de consolidação aparecerão quando a escola incluir itens.</td></tr>}
+          </tbody>
+          <tfoot className="bg-[#edf5ed]">
+            <tr>
+              <td colSpan={3} className="px-5 py-3 text-right text-xs font-bold uppercase tracking-[.12em] text-[#526d5d]">Total global</td>
+              <td className="px-5 py-3 text-right font-semibold text-[#183f31]">{money(totalValue)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </CardContent>
+  </Card>;
+}
 
 function InventoryItemsCard({ items, categories, editable, onAdd, onEdit, onDelete }: { items: any[]; categories: any[]; editable?: boolean; onAdd: () => void; onEdit: (item: any) => void; onDelete: (id: number) => void }) {
   const total = items?.reduce((sum, item) => sum + Number(item.totalValue), 0) ?? 0;
