@@ -170,6 +170,66 @@ export const inventoryItems = mysqlTable(
   }),
 );
 
+export const historicalInventoryLoads = mysqlTable(
+  "historicalInventoryLoads",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    schoolId: int("schoolId").notNull(),
+    year: int("year").notNull(),
+    sourceFileName: varchar("sourceFileName", { length: 255 }),
+    description: varchar("description", { length: 255 }),
+    importedAt: timestamp("importedAt").defaultNow().notNull(),
+  },
+  table => ({
+    schoolIdx: index("historical_load_school_idx").on(table.schoolId),
+    schoolYearIdx: index("historical_load_school_year_idx").on(
+      table.schoolId,
+      table.year,
+    ),
+  }),
+);
+
+export const historicalInventoryItems = mysqlTable(
+  "historicalInventoryItems",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    loadId: int("loadId").notNull(),
+
+    propertyNumber: varchar("propertyNumber", { length: 80 }).notNull(),
+
+    description: text("description"),
+    materialCode: varchar("materialCode", { length: 80 }),
+    itemCode: varchar("itemCode", { length: 80 }),
+
+    conservationState: varchar("conservationState", { length: 80 }),
+
+    quantity: int("quantity"),
+
+    unitValue: decimal("unitValue", {
+      precision: 14,
+      scale: 2,
+    }),
+
+    totalValue: decimal("totalValue", {
+      precision: 14,
+      scale: 2,
+    }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    loadIdx: index("historical_item_load_idx").on(table.loadId),
+
+    propertyIdx: index("historical_item_property_idx").on(
+      table.propertyNumber,
+    ),
+
+    loadPropertyIdx: uniqueIndex(
+      "historical_item_load_property_unique",
+    ).on(table.loadId, table.propertyNumber),
+  }),
+);
+
 export const inventoryIssues = mysqlTable(
   "inventoryIssues",
   {

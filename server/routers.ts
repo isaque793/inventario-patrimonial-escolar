@@ -14,6 +14,7 @@ import {
   validationHistory,
 } from "../drizzle/schema";
 import {
+  findHistoricalItem,
   findSchoolMember,
   getCycleById,
   getManagementCycles,
@@ -291,6 +292,12 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         await assertSchoolAccess(ctx.user, input.schoolId);
         return getSchoolOverview(input.schoolId, input.year);
+      }),
+    lookupHistorical: protectedProcedure
+      .input(z.object({ schoolId: z.number().int().positive(), propertyNumber: z.string().trim().min(1).max(80) }))
+      .query(async ({ ctx, input }) => {
+        await assertSchoolAccess(ctx.user, input.schoolId);
+        return findHistoricalItem(input.schoolId, input.propertyNumber);
       }),
     createCycle: protectedProcedure
       .input(z.object({ schoolId: z.number().int().positive(), year: yearInput }))

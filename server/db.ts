@@ -1,9 +1,11 @@
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "crypto";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import {
   committeeMembers,
+  historicalInventoryItems,
+  historicalInventoryLoads,
   inventoryCycles,
   inventoryDocuments,
   inventoryIssues,
@@ -597,4 +599,52 @@ export async function getCyclesForSchoolIds(schoolIds: number[], year: number) {
   if (schoolIds.length === 0) return [];
   const db = await requireDb();
   return db.select().from(inventoryCycles).where(and(inArray(inventoryCycles.schoolId, schoolIds), eq(inventoryCycles.year, year)));
+}
+
+/**
+ * Variações aceitas para o mesmo número patrimonial: o que foi digitado/lido
+ * e a versão sem zeros à esquerda (o Excel guarda 048431672 como 48431672).
+ */
+export function historicalPropertyNumberCandidates(propertyNumber: string) {
+  const typed = propertyNumber.replace(/\s+/g, "").trim();
+  const withoutZeros = typed.replace(/^0+(?=\d)/, "");
+  return Array.from(new Set([typed, withoutZeros].filter(Boolean)));
+}
+
+/**
+ * Procura um patrimônio no inventário histórico da escola. Se aparecer em
+ * mais de uma carga, devolve o registro do ano mais recente.
+ * Só consulta: nunca cria nada no inventário atual.
+ */
+export async function findHistoricalItem(schoolId: number, propertyNumber: string) {
+  const candidates = historicalPropertyNumberCandidates(propertyNumber);
+  if (!candidates.length) return null;
+
+  const db = await requireDb();
+  const rows = await db
+    .select({
+      loadId: historicalInventoryLoads.id,
+      year: historicalInventoryLoads.year,
+      sourceFileName: historicalInventoryLoads.sourceFileName,
+      propertyNumber: historicalInventoryItems.propertyNumber,
+      description: historicalInventoryItems.description,
+      materialCode: historicalInventoryItems.materialCode,
+      itemCode: historicalInventoryItems.itemCode,
+      conservationState: historicalInventoryItems.conservationState,
+      quantity: historicalInventoryItems.quantity,
+      unitValue: historicalInventoryItems.unitValue,
+      totalValue: historicalInventoryItems.totalValue,
+    })
+    .from(historicalInventoryItems)
+    .innerJoin(historicalInventoryLoads, eq(historicalInventoryItems.loadId, historicalInventoryLoads.id))
+    .where(
+      and(
+        eq(historicalInventoryLoads.schoolId, schoolId),
+        inArray(historicalInventoryItems.propertyNumber, candidates),
+      ),
+    )
+    .orderBy(desc(historicalInventoryLoads.year), desc(historicalInventoryLoads.importedAt))
+    .limit(1);
+
+  return rows[0] ?? null;
 }
