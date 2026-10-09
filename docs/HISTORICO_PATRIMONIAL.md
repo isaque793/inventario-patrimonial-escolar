@@ -6,11 +6,27 @@ informa ou lê o número patrimonial, o formulário consulta o histórico da
 escola e preenche automaticamente descrição, código de despesa, valor e estado
 de conservação. A pessoa confere antes de salvar.
 
-## Como a escola é identificada
+## Busca pelo número patrimonial
 
-Cada planilha de carga traz no cabeçalho `COD. SIAD: 1265367`. Esse código
-precisa estar em `schools.siadCode`. Ele aparece no cadastro da escola, e só a
-equipe gestora pode alterá-lo.
+O número patrimonial é único no Estado. Por isso, o formulário procura o
+número em **todas** as cargas importadas, não só nas da escola do inventário
+aberto. Assim também encontra bens que mudaram de escola. O número pode ser
+digitado com ponto, traço ou zeros à esquerda. Se ele aparecer em mais de uma
+carga, vale a da escola do inventário aberto e, depois, a do ano mais recente.
+
+## Carga e escola
+
+Cada carga fica vinculada à escola, para comparações de inventário futuras.
+O vínculo usa o `COD. SIAD` do cabeçalho da planilha, que precisa estar em
+`schools.siadCode`. O código aparece no cadastro da escola, e só a equipe
+gestora pode alterá-lo. Também é conferido o nome da unidade
+("UN. ADMINISTRATIVA"), como trava contra SIAD trocado.
+
+Quando o SIAD não está em nenhuma escola, ou o nome não confere, a carga
+**entra mesmo assim, sem escola vinculada**, e o script avisa. Os itens dela
+continuam sendo encontrados no formulário. Se a coluna VALOR vier com
+`#VALUE!`, os itens entram sem valor: o formulário preenche o resto e o valor
+fica em branco.
 
 ## Estrutura do banco
 
@@ -78,20 +94,15 @@ Para voltar ao banco local, feche o terminal ou rode
    pnpm tsx scripts/importHistoricalInventory.ts --dir dados-historicos/2025
    ```
 
-   Para cada planilha, o script confere a quantidade e o valor com o
-   `TOTAL GLOBAL`, recusa números patrimoniais repetidos, acha a escola pelo
-   SIAD, confere se o nome da unidade no cabeçalho ("UN. ADMINISTRATIVA")
-   bate com o nome da escola (trava contra SIAD trocado) e grava tudo numa
-   transação por escola. Uma planilha com problema não
-   impede as outras. Se a escola já tiver carga do mesmo ano, ela é pulada,
-   a menos que se use `--replace`.
+   Para cada planilha, o script confere a quantidade (e o valor, quando
+   existe) com o `TOTAL GLOBAL`, recusa números patrimoniais repetidos, vincula
+   a escola pelo SIAD quando possível e grava tudo numa transação por planilha.
+   Uma planilha com problema não impede as outras. Se a carga já existir para
+   a escola e o ano (ou para o mesmo arquivo e ano, quando não há escola
+   vinculada), ela é pulada, a menos que se use `--replace`.
 
-   Para uma planilha sem SIAD no cabeçalho, ou cujo SIAD não bate com a escola
-   e você já conferiu manualmente:
+   Para vincular manualmente uma planilha a uma escola:
    `--file "caminho.xlsx" --school-id 12 --year 2025`.
-
-   Se a coluna VALOR vier com `#VALUE!`, os valores se perderam na exportação:
-   exporte a planilha de novo da SIAD.
 
 ## Conferência
 

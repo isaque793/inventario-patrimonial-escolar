@@ -13,8 +13,9 @@ import { connectFromEnv, type RowDataPacket } from "./lib/scriptDb";
 /** Mesmas variações usadas pelo servidor (server/db.ts). */
 function historicalPropertyNumberCandidates(propertyNumber: string) {
   const typed = propertyNumber.replace(/\s+/g, "").trim();
-  const withoutZeros = typed.replace(/^0+(?=\d)/, "");
-  return Array.from(new Set([typed, withoutZeros].filter(Boolean)));
+  const digits = typed.replace(/\D/g, "");
+  const withoutZeros = digits.replace(/^0+(?=\d)/, "");
+  return Array.from(new Set([typed, digits, withoutZeros].filter(Boolean)));
 }
 
 function arg(name: string) {
@@ -46,7 +47,7 @@ async function main() {
 
     // 3. Cargas gravadas
     const loads = await q(
-      `SELECT l.id, l.year, l.schoolId, s.name AS school, s.siadCode, l.sourceFileName,
+      `SELECT l.*, s.name AS school, s.siadCode AS schoolSiad,
               (SELECT COUNT(*) FROM historicalInventoryItems i WHERE i.loadId = l.id) AS items
          FROM historicalInventoryLoads l
          LEFT JOIN schools s ON s.id = l.schoolId
@@ -58,7 +59,7 @@ async function main() {
       console.log("   ✖ Nenhuma carga neste banco. A importação rodou só com --dry-run, deu erro em todas as planilhas, ou foi feita em OUTRO banco.");
     }
     for (const row of loads.slice(0, 15)) {
-      console.log(`   - carga ${row.id} · ${row.year} · escola id ${row.schoolId} ${row.school ?? "(ESCOLA NÃO EXISTE)"} · SIAD ${row.siadCode ?? "vazio"} · ${row.items} itens · ${row.sourceFileName}`);
+      console.log(`   - carga ${row.id} · ${row.year} · ${row.schoolId ? `escola id ${row.schoolId} ${row.school ?? "(ESCOLA NÃO EXISTE)"}` : "sem escola vinculada"} · SIAD ${row.siadCode ?? row.schoolSiad ?? "vazio"} · ${row.items} itens · ${row.sourceFileName}`);
     }
     if (loads.length > 15) console.log(`   ... e mais ${loads.length - 15}`);
 
@@ -86,22 +87,23 @@ async function main() {
            FROM historicalInventoryItems i
            JOIN historicalInventoryLoads l ON l.id = i.loadId
            LEFT JOIN schools s ON s.id = l.schoolId
-          WHERE i.propertyNumber IN (?)`,
+          WHERE i.propertyNumber IN (?)
+          ORDER BY l.year DESC`,
         [candidates],
       );
       console.log(`5. Patrimônio ${property} (procurado como: ${candidates.join(", ")}):`);
       if (!hits.length) console.log("   ✖ Não está em nenhuma carga deste banco.");
       for (const row of hits) {
-        console.log(`   ✔ ${row.propertyNumber} · ${row.description} · ${row.year} · escola id ${row.schoolId} ${row.school ?? ""}`);
+        console.log(`   ✔ ${row.propertyNumber} · ${row.description} · ${row.year} · ${row.school ?? "sem escola vinculada"}`);
       }
       if (hits.length) {
-        console.log("   No formulário, ele só aparece no inventário DESSA escola (o histórico é consultado por escola).");
+        console.log("   No formulário, ele é encontrado em qualquer escola (a busca é só pelo número patrimonial).");
       }
     } else {
       const sample = await q("SELECT i.propertyNumber, s.name AS school FROM historicalInventoryItems i JOIN historicalInventoryLoads l ON l.id = i.loadId LEFT JOIN schools s ON s.id = l.schoolId LIMIT 3");
       if (sample.length) {
         console.log("5. Números para testar no formulário:");
-        for (const row of sample) console.log(`   ${row.propertyNumber} → no inventário da escola ${row.school}`);
+        for (const row of sample) console.log(`   ${row.propertyNumber} (carga de ${row.school ?? "escola não vinculada"})`);
       }
     }
     console.log("");
