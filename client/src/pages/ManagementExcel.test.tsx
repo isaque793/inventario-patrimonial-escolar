@@ -116,7 +116,5 @@ describe("exportações Excel no painel de gestão", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Analisar" }));
-    expect(mocks.navigate).toHaveBeenCalledWith("/gestao/analise/7");
   });
 });

@@ -5,10 +5,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArchiveStatusPanel } from "@/components/ArchiveStatusPanel";
 import { exportPendingIssuesTemplate, exportSchoolControlWorkbook } from "@/lib/exportSchoolControlExcel";
 import { trpc } from "@/lib/trpc";
-import { Building2, CheckCircle2, CircleAlert, ClipboardCheck, FileSpreadsheet, Landmark, Loader2, Send } from "lucide-react";
+import { Building2, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, Loader2, Send } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
 import { ScrollableList } from "@/components/ScrollableList";
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -27,14 +26,6 @@ const issueStatusLabels: Record<string, string> = {
   open: "Aberta",
   in_progress: "Em andamento",
   resolved: "Resolvida",
-};
-
-const cycleStatusLabels: Record<string, string> = {
-  draft: "Em preparação",
-  submitted: "Submetido",
-  under_review: "Em análise",
-  returned: "Devolvido",
-  validated: "Validado",
 };
 
 const money = (value: number | string | null | undefined) =>
@@ -74,7 +65,6 @@ export default function ManagementExcel() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [issueStatus, setIssueStatus] = useState("all");
   const [schoolFilter, setSchoolFilter] = useState("all");
-  const [, setLocation] = useLocation();
 
   const dashboardQuery = trpc.management.dashboard.useQuery({ year });
   const controlExportQuery = trpc.management.controlExport.useQuery({ year }, { enabled: false });
@@ -175,56 +165,6 @@ export default function ManagementExcel() {
         <Metric icon={CircleAlert} label="Pendências abertas" value={metrics.openIssues} tone="rose" />
         <Metric icon={Landmark} label="Valor consolidado" value={money(metrics.totalValue)} />
       </div>
-
-      <Card className="border-[#dce7dc]">
-        <CardContent className="p-0">
-          <div className="flex items-start gap-3 p-5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-[#e8f1e8] text-[#276249]">
-              <ClipboardCheck className="size-4" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-[#203f33]">Validações por escola</h2>
-              <p className="mt-0.5 text-xs leading-5 text-[#6b7d72]">
-                Abra a revisão para conferir documentos, inventário, pendências e concluir a análise administrativa.
-              </p>
-            </div>
-          </div>
-
-          <ScrollableList>
-            <table className="w-full min-w-[680px] text-sm">
-              <thead className="border-y border-[#e4ece5] bg-[#f7faf6] text-[10px] font-bold uppercase tracking-[.1em] text-[#6c7e72]">
-                <tr>
-                  <th className="px-5 py-3 text-left">Escola</th>
-                  <th className="px-4 py-3 text-left">Situação</th>
-                  <th className="px-4 py-3 text-right">Submissão</th>
-                  <th className="px-5 py-3 text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboard.cycles.map((entry: any) => (
-                  <tr key={entry.cycle.id} data-list-item className="border-b border-[#edf2ed]">
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-[#234136]">{entry.school.name}</p>
-                      <p className="text-xs text-[#75867a]">{entry.school.city || "Sem município"}</p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <Badge className="border-0 bg-[#e8f1e8] text-[#286149]">{cycleStatusLabels[entry.cycle.status]}</Badge>
-                    </td>
-                    <td className="px-4 py-4 text-right text-xs text-[#687a6e]">
-                      {entry.cycle.submittedAt ? new Date(entry.cycle.submittedAt).toLocaleDateString("pt-BR") : "—"}
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <Button size="sm" variant="outline" onClick={() => setLocation(`/gestao/analise/${entry.cycle.id}`)}>
-                        Analisar
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ScrollableList>
-        </CardContent>
-      </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="border-[#dce7dc]">

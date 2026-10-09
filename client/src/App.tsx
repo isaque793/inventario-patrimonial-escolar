@@ -15,8 +15,10 @@ import ResetPassword from "./pages/ResetPassword";
 import Management from "./pages/ManagementExcel";
 import ManagementReview from "./pages/ManagementReview";
 import NotFound from "./pages/NotFound";
+import Validation from "./pages/Validation";
 
 function ManagementRoute() { return <AdminGuard><Management /></AdminGuard>; }
+function ValidationRoute() { return <AdminGuard><Validation /></AdminGuard>; }
 function ManagementReviewRoute() { return <AdminGuard><ManagementReview /></AdminGuard>; }
 function AdministratorsRoute() { return <AdminGuard><AdminUsers /></AdminGuard>; }
 function AccessRequestsRoute() { return <AdminGuard><AccessRequests /></AdminGuard>; }
@@ -31,6 +33,7 @@ function Router() {
           <Switch>
             <Route path="/" component={Home} />
             <Route path="/gestao" component={ManagementRoute} />
+            <Route path="/validacao" component={ValidationRoute} />
             <Route path="/gestao/analise/:cycleId" component={ManagementReviewRoute} />
             <Route path="/administradores" component={AdministratorsRoute} />
             <Route path="/solicitacoes-acesso" component={AccessRequestsRoute} />

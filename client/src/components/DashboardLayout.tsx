@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
 import { getNavigationItemsForRole } from "@/lib/roleNavigation";
-import { BarChart3, Building2, ClipboardList, LogOut, PanelLeft, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { BarChart3, Building2, ClipboardCheck, ClipboardList, LogOut, PanelLeft, ShieldCheck, UserRoundCheck } from "lucide-react";
 import React, { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -44,7 +44,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isCollapsed = state === "collapsed";
-  const iconByName = { management: BarChart3, schools: Building2, administrators: ShieldCheck, requests: UserRoundCheck, inventory: ClipboardList };
+  const iconByName = { management: BarChart3, validation: ClipboardCheck, schools: Building2, administrators: ShieldCheck, requests: UserRoundCheck, inventory: ClipboardList };
   const menuItems = getNavigationItemsForRole(user?.role).map(item => ({ ...item, icon: iconByName[item.icon] }));
   const activeLabel = menuItems.find(item => item.path === location)?.label ?? "Inventário";
 

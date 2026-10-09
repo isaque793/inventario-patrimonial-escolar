@@ -13,7 +13,6 @@ describe("painel real de gestão", () => {
   it("carrega os conteúdos de gestão e consolidação", () => {
     render(<Management />);
     expect(screen.getByRole("heading", { name: "Gestão e consolidação" })).toBeInTheDocument();
-    expect(screen.getByText("Validações por escola")).toBeInTheDocument();
     expect(screen.getByText("Resumo consolidado")).toBeInTheDocument();
     expect(screen.getByText("Pendências consolidadas")).toBeInTheDocument();
   });
