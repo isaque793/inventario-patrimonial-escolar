@@ -5,8 +5,11 @@
  * O histórico NÃO vira inventário atual: só é consultado quando alguém
  * cadastra um patrimônio e o formulário busca os dados antigos.
  *
- * A escola é identificada pelo "COD. SIAD" do cabeçalho da planilha, que
- * precisa estar preenchido em schools.siadCode (ver fillSchoolSiadCodes.ts).
+ * A busca no formulário é feita só pelo número patrimonial, em todas as
+ * cargas. Por isso toda planilha válida é importada. A escola é vinculada
+ * (informativo) pelo "COD. SIAD" do cabeçalho quando ele está em
+ * schools.siadCode e o nome da unidade confere; senão a carga entra sem
+ * escola vinculada, com um aviso.
  *
  * Uso (na raiz do projeto):
  *
@@ -21,8 +24,7 @@
  *   --dir         pasta com as planilhas .xlsx (não entra em subpastas)
  *   --file        uma planilha .xlsx
  *   --year        ano da carga; opcional se a pasta se chamar 2025, 2024...
- *   --school-id   (só com --file) força a escola, ignorando o SIAD da planilha
- *                 e a conferência do nome da unidade
+ *   --school-id   (só com --file) vincula a carga a esta escola
  *   --dry-run     lê, valida e mostra o que faria, sem gravar nada
  *   --replace     se a escola já tiver carga do mesmo ano, apaga e reimporta
  *
@@ -30,6 +32,7 @@
  */
 import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { applySchemaUpgrades, planSchemaUpgrades } from "../server/schemaUpgrades";
 import { connectFromEnv, type ResultSetHeader, type RowDataPacket } from "./lib/scriptDb";
 import { parseSiadInventory, readSheetRows, toMoney, unitNameMatchesSchool, type SiadInventory } from "./lib/siadSpreadsheet";
 
@@ -96,6 +99,19 @@ async function main() {
   console.log(`\nBanco: ${database} em ${host}`);
   console.log(`Ano da carga: ${args.year} · ${args.files.length} planilha(s)${args.dryRun ? " · DRY-RUN (nada será gravado)" : ""}\n`);
 
+  // Garante a estrutura do banco (mesmos ajustes que o servidor faz ao iniciar).
+  const pending = await planSchemaUpgrades(connection, database);
+  if (pending.length) {
+    if (args.dryRun) {
+      console.log("⚠ O banco precisa de ajustes antes de gravar (serão aplicados automaticamente na importação):");
+      for (const step of pending) console.log(`   • ${step.description}`);
+      console.log("");
+    } else {
+      await applySchemaUpgrades(connection, database, { log: message => console.log(`   ${message}`) });
+      console.log("");
+    }
+  }
+
   try {
     for (const file of args.files) {
       const fileName = basename(file);
@@ -114,53 +130,57 @@ async function main() {
         continue;
       }
 
-      // 2. Achar a escola (pelo SIAD do cabeçalho, ou --school-id).
-      let school: School | undefined;
+      // 2. Vincular a uma escola, quando possível (só informativo: a busca no
+      //    formulário é feita pelo número patrimonial em todas as cargas).
+      let school: School | null = null;
+      let schoolNote = "";
       if (args.schoolId) {
         const [rows] = await connection.query<RowDataPacket[]>("SELECT id, name FROM schools WHERE id = ?", [args.schoolId]);
-        school = rows[0] as School | undefined;
+        school = (rows[0] as School | undefined) ?? null;
         if (!school) {
           log("error", `Escola com id ${args.schoolId} não existe.`);
           continue;
         }
-      } else {
-        if (!inventory.siadCode) {
-          log("error", "A planilha não tem 'COD. SIAD' no cabeçalho. Use --file com --school-id.");
-          continue;
-        }
+      } else if (inventory.siadCode) {
         const [rows] = await connection.query<RowDataPacket[]>("SELECT id, name FROM schools WHERE siadCode = ?", [inventory.siadCode]);
-        school = rows[0] as School | undefined;
-        if (!school) {
-          log("error", `SIAD ${inventory.siadCode} (${inventory.unitName ?? "sem nome"}) não está em nenhuma escola. Preencha o código SIAD da escola e rode de novo.`);
-          continue;
+        const candidate = rows[0] as School | undefined;
+        if (!candidate) {
+          schoolNote = `SIAD ${inventory.siadCode} não está em nenhuma escola: carga gravada sem escola vinculada.`;
+        } else if (!unitNameMatchesSchool(inventory.unitName, candidate.name)) {
+          schoolNote = `O SIAD ${inventory.siadCode} é da escola "${candidate.name}", mas a planilha é da unidade "${inventory.unitName}": carga gravada sem escola vinculada.`;
+        } else {
+          school = candidate;
         }
-        // Trava contra SIAD trocado: o nome da unidade no cabeçalho tem que bater com a escola.
-        if (!unitNameMatchesSchool(inventory.unitName, school.name)) {
-          log(
-            "error",
-            `O SIAD ${inventory.siadCode} é da escola "${school.name}", mas a planilha é da unidade "${inventory.unitName}". ` +
-              "Confira o SIAD no cadastro da escola. Se tiver certeza, importe esta planilha com --file e --school-id.",
-          );
-          continue;
-        }
+      } else {
+        schoolNote = "Planilha sem 'COD. SIAD': carga gravada sem escola vinculada.";
       }
 
-      const summary = `${school.name} (id ${school.id}${inventory.siadCode ? ` · SIAD ${inventory.siadCode}` : ""}) · ${inventory.items.length} itens · R$ ${toMoney(inventory.totalValue)}${inventory.expected ? " · confere com TOTAL GLOBAL" : " · sem TOTAL GLOBAL para conferir"}`;
+      const origin = school ? `${school.name} (id ${school.id})` : (inventory.unitName ?? fileName);
+      const valueInfo = inventory.missingValues
+        ? `${inventory.missingValues} sem valor (coluna VALOR com erro do Excel)`
+        : `R$ ${toMoney(inventory.totalValue)}`;
+      const checkInfo = inventory.expected ? " · confere com TOTAL GLOBAL" : " · sem TOTAL GLOBAL para conferir";
+      const valueNote = inventory.missingValues ? "\n    ⚠ Itens importados sem valor: o formulário preenche descrição, estado e código; o valor fica em branco." : "";
+      const summary = `${origin}${inventory.siadCode ? ` · SIAD ${inventory.siadCode}` : ""} · ${inventory.items.length} itens · ${valueInfo}${checkInfo}${schoolNote ? `\n    ⚠ ${schoolNote}` : ""}${valueNote}`;
 
       // 3. Evitar duas planilhas da mesma escola no mesmo lote.
-      if (seenSchools.has(school.id)) {
-        log("error", `${school.name} já apareceu neste lote em "${seenSchools.get(school.id)}". Deixe só uma planilha por escola na pasta.`);
-        continue;
+      if (school) {
+        if (seenSchools.has(school.id)) {
+          log("error", `${school.name} já apareceu neste lote em "${seenSchools.get(school.id)}". Deixe só uma planilha por escola na pasta.`);
+          continue;
+        }
+        seenSchools.set(school.id, fileName);
       }
-      seenSchools.set(school.id, fileName);
 
-      // 4. Carga já existente para escola + ano?
-      const [existing] = await connection.query<RowDataPacket[]>(
-        "SELECT id FROM historicalInventoryLoads WHERE schoolId = ? AND year = ?",
-        [school.id, args.year],
-      );
+      // 4. Carga já existente? (mesma escola + ano; sem escola: mesmo arquivo + ano)
+      const [existing] = school
+        ? await connection.query<RowDataPacket[]>("SELECT id FROM historicalInventoryLoads WHERE schoolId = ? AND year = ?", [school.id, args.year])
+        : await connection.query<RowDataPacket[]>(
+            "SELECT id FROM historicalInventoryLoads WHERE schoolId IS NULL AND year = ? AND sourceFileName = ?",
+            [args.year, fileName],
+          );
       if (existing.length && !args.replace) {
-        log("skipped", `${summary}\n    Já existe carga ${args.year} para esta escola (use --replace para substituir).`);
+        log("skipped", `${summary}\n    Já existe carga ${args.year} ${school ? "para esta escola" : "deste arquivo"} (use --replace para substituir).`);
         continue;
       }
 
@@ -177,8 +197,14 @@ async function main() {
           await connection.query("DELETE FROM historicalInventoryLoads WHERE id = ?", [load.id]);
         }
         const [loadResult] = await connection.query<ResultSetHeader>(
-          "INSERT INTO historicalInventoryLoads (schoolId, year, sourceFileName, description) VALUES (?, ?, ?, ?)",
-          [school.id, args.year, fileName, `Carga patrimonial ${args.year} importada da planilha SIAD`],
+          "INSERT INTO historicalInventoryLoads (schoolId, siadCode, year, sourceFileName, description) VALUES (?, ?, ?, ?, ?)",
+          [
+            school?.id ?? null,
+            inventory.siadCode,
+            args.year,
+            fileName,
+            `Carga patrimonial ${args.year} · ${inventory.unitName ?? "unidade não informada"}`.slice(0, 255),
+          ],
         );
         const loadId = loadResult.insertId;
         const chunkSize = 200;

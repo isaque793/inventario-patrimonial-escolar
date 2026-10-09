@@ -7,7 +7,8 @@
  *   pnpm tsx scripts/migrateHistoricalInventory.ts --dry-run
  *
  * Regras para acrescentar um passo aqui:
- *   - só CREATE TABLE IF NOT EXISTS / ADD COLUMN NULL / CREATE INDEX;
+ *   - só CREATE TABLE IF NOT EXISTS / ADD COLUMN NULL / CREATE INDEX /
+ *     tornar uma coluna opcional (NOT NULL -> NULL);
  *   - nunca apagar, renomear ou mudar tipo de nada;
  *   - o código antigo tem que continuar funcionando depois do passo.
  *
@@ -22,7 +23,8 @@ export type Queryable = { query: (sql: string, params?: unknown[]) => Promise<un
 
 const CREATE_HISTORICAL_LOADS = `CREATE TABLE IF NOT EXISTS \`historicalInventoryLoads\` (
   \`id\` int AUTO_INCREMENT NOT NULL,
-  \`schoolId\` int NOT NULL,
+  \`schoolId\` int NULL,
+  \`siadCode\` varchar(20) NULL,
   \`year\` int NOT NULL,
   \`sourceFileName\` varchar(255) NULL,
   \`description\` varchar(255) NULL,
@@ -64,15 +66,13 @@ export async function planSchemaUpgrades(connection: Queryable, database: string
       String(row.name),
     ),
   );
-  const columns = new Set(
-    (
-      await rows(
-        connection,
-        "SELECT LOWER(TABLE_NAME) AS tableName, LOWER(COLUMN_NAME) AS columnName FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ?",
-        [database],
-      )
-    ).map(row => `${row.tableName}.${row.columnName}`),
+  const columnRows = await rows(
+    connection,
+    "SELECT LOWER(TABLE_NAME) AS tableName, LOWER(COLUMN_NAME) AS columnName, IS_NULLABLE AS nullable FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ?",
+    [database],
   );
+  const columns = new Set(columnRows.map(row => `${row.tableName}.${row.columnName}`));
+  const notNullColumns = new Set(columnRows.filter(row => row.nullable === "NO").map(row => `${row.tableName}.${row.columnName}`));
   const indexes = new Set(
     (
       await rows(
@@ -98,6 +98,20 @@ export async function planSchemaUpgrades(connection: Queryable, database: string
   }
   if (!tables.has("historicalinventoryloads")) {
     steps.push({ description: "Criar tabela historicalInventoryLoads", sql: CREATE_HISTORICAL_LOADS });
+  } else {
+    // Carga sem escola vinculada (a busca é pelo número patrimonial).
+    if (notNullColumns.has("historicalinventoryloads.schoolid")) {
+      steps.push({
+        description: "Permitir carga histórica sem escola (historicalInventoryLoads.schoolId opcional)",
+        sql: "ALTER TABLE `historicalInventoryLoads` MODIFY COLUMN `schoolId` int NULL",
+      });
+    }
+    if (!columns.has("historicalinventoryloads.siadcode")) {
+      steps.push({
+        description: "Adicionar coluna historicalInventoryLoads.siadCode",
+        sql: "ALTER TABLE `historicalInventoryLoads` ADD COLUMN `siadCode` varchar(20) NULL AFTER `schoolId`",
+      });
+    }
   }
   if (!tables.has("historicalinventoryitems")) {
     steps.push({ description: "Criar tabela historicalInventoryItems", sql: CREATE_HISTORICAL_ITEMS });

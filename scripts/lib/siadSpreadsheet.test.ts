@@ -67,10 +67,15 @@ describe("unitNameMatchesSchool", () => {
   });
 });
 
-it("explica quando a coluna VALOR veio com #VALUE!", () => {
+it("importa sem valor quando a coluna VALOR veio com #VALUE!", () => {
   const rows = inventoryRows.map(row => [...row]);
   rows[4][6] = "#VALUE!";
-  expect(() => parseSiadInventory(rows)).toThrow(/exporte a planilha de novo/);
+  rows[5][6] = "#VALUE!";
+  rows[8][6] = "#VALUE!";
+  const inventory = parseSiadInventory(rows);
+  expect(inventory.items).toHaveLength(2);
+  expect(inventory.missingValues).toBe(2);
+  expect(inventory.items[0]).toMatchObject({ description: "AMPLIFICADOR DE AUDIO", unitValue: null, totalValue: null, itemCode: "5208" });
 });
 
 describe("normalizeCode", () => {

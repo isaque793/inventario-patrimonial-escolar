@@ -21,8 +21,9 @@ export type HistoricalRow = {
   itemCode: string | null;
   conservationState: string | null;
   quantity: number;
-  unitValue: string;
-  totalValue: string;
+  /** Vazio quando a coluna VALOR veio com erro do Excel (#VALUE!). */
+  unitValue: string | null;
+  totalValue: string | null;
 };
 
 export type SiadInventory = {
@@ -34,6 +35,8 @@ export type SiadInventory = {
   lastRow: number;
   totalQuantity: number;
   totalValue: number;
+  /** Quantas linhas vieram sem valor (#VALUE! etc.). */
+  missingValues: number;
 };
 
 export type SreSchool = {
@@ -140,15 +143,11 @@ export function parseSiadInventory(rows: SheetRows): SiadInventory {
     lastRowIndex = index;
 
     const quantity = Number(row[cQty] ?? 1) || 1;
-    const total = Number(row[cValue] ?? 0);
-    if (!Number.isFinite(total)) {
-      const raw = String(row[cValue]);
-      throw new Error(
-        raw.startsWith("#")
-          ? `A coluna VALOR veio com erro do Excel (${raw}) a partir da linha ${index + 1}. Os valores se perderam na exportação: exporte a planilha de novo da SIAD.`
-          : `Valor inválido na linha ${index + 1}: ${raw}`,
-      );
-    }
+    const rawValue = row[cValue];
+    // Erro do Excel na célula (#VALUE!, #REF!...): importa o item sem valor.
+    const valueMissing = typeof rawValue === "string" && rawValue.trim().startsWith("#");
+    const total = valueMissing ? NaN : Number(rawValue ?? 0);
+    if (!valueMissing && !Number.isFinite(total)) throw new Error(`Valor inválido na linha ${index + 1}: ${String(rawValue)}`);
 
     items.push({
       propertyNumber,
@@ -159,8 +158,8 @@ export function parseSiadInventory(rows: SheetRows): SiadInventory {
       itemCode: row[cItem] == null ? null : normalizeCode(row[cItem]),
       conservationState: cleanState(row[cState]),
       quantity,
-      unitValue: toMoney(total / quantity),
-      totalValue: toMoney(total),
+      unitValue: valueMissing ? null : toMoney(total / quantity),
+      totalValue: valueMissing ? null : toMoney(total),
     });
   }
   if (!items.length) throw new Error("Nenhum patrimônio encontrado abaixo do cabeçalho.");
@@ -170,6 +169,7 @@ export function parseSiadInventory(rows: SheetRows): SiadInventory {
     const row = rows[index] ?? [];
     const labelIndex = row.findIndex(cell => normalizeText(cell) === "TOTAL GLOBAL");
     if (labelIndex >= 0) {
+      // Valor do TOTAL GLOBAL pode vir como "#VALUE!" (NaN): aí só a quantidade é conferida.
       expected = { quantity: Number(row[labelIndex + 1]), value: Number(row[labelIndex + 2]) };
       break;
     }
@@ -181,18 +181,19 @@ export function parseSiadInventory(rows: SheetRows): SiadInventory {
   if (duplicates.length) throw new Error(`Números patrimoniais repetidos: ${duplicates.slice(0, 10).join(", ")}${duplicates.length > 10 ? "…" : ""}`);
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalValue = items.reduce((sum, item) => sum + Number(item.totalValue), 0);
+  const totalValue = items.reduce((sum, item) => sum + Number(item.totalValue ?? 0), 0);
+  const missingValues = items.filter(item => item.totalValue === null).length;
   if (expected) {
     if (expected.quantity !== totalQuantity) {
       throw new Error(`Quantidade lida (${totalQuantity}) diferente do TOTAL GLOBAL (${expected.quantity}).`);
     }
-    if (Math.abs(expected.value - totalValue) > 0.05) {
+    if (!missingValues && Number.isFinite(expected.value) && Math.abs(expected.value - totalValue) > 0.05) {
       throw new Error(`Valor lido (${toMoney(totalValue)}) diferente do TOTAL GLOBAL (${toMoney(expected.value)}).`);
     }
   }
 
   const { siadCode, unitName } = readHeaderInfo(rows, headerIndex);
-  return { siadCode, unitName, items, expected, firstRow: headerIndex + 2, lastRow: lastRowIndex + 1, totalQuantity, totalValue };
+  return { siadCode, unitName, items, expected, firstRow: headerIndex + 2, lastRow: lastRowIndex + 1, totalQuantity, totalValue, missingValues };
 }
 
 /** Interpreta a lista de escolas da SRE (colunas CÓDIGO SIAD, CÓDIGO DA ESCOLA, ESTABELECIMENTO DE ENSINO, MUNICÍPIO). */
@@ -252,4 +253,3 @@ export function unitNameMatchesSchool(unitName: string | null, schoolName: strin
   if (!unitWords.length || !schoolWords.length) return true;
   return unitWords.some(word => schoolWords.some(other => other === word || other.startsWith(word) || word.startsWith(other)));
 }
-
