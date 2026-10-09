@@ -62,7 +62,7 @@ async function main() {
       }
     }
 
-    console.log(problems ? `\n${problems} tabela(s) com problema. Num banco de teste, recrie o banco vazio e rode: pnpm drizzle-kit push\n` : "\nTudo certo: o banco tem todas as tabelas e colunas do schema.\n");
+    console.log(problems ? `\n${problems} tabela(s) com problema.\n  Histórico / SIAD / SEI: pnpm tsx scripts/migrateHistoricalInventory.ts\n  Banco de teste incompleto: recrie o banco vazio e rode pnpm drizzle-kit push\n` : "\nTudo certo: o banco tem todas as tabelas e colunas do schema.\n");
   } finally {
     await connection.end();
   }
