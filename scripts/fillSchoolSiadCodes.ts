@@ -17,7 +17,7 @@
  * cadastro da escola, por alguém da equipe gestora.
  */
 import { basename } from "node:path";
-import { connectFromEnv, type RowDataPacket } from "./lib/scriptDb";
+import { connectFromEnv, type ResultSetHeader, type RowDataPacket } from "./lib/scriptDb";
 import { matchSchools, type DbSchool, type SchoolMatch } from "./lib/schoolMatching";
 import { parseSreSchoolList, readSheetRows } from "./lib/siadSpreadsheet";
 
@@ -98,17 +98,27 @@ async function main() {
       return;
     }
 
-    await connection.beginTransaction();
-    try {
-      for (const { school, sre } of toWrite) {
-        await connection.query("UPDATE schools SET siadCode = ? WHERE id = ? AND (siadCode IS NULL OR siadCode = '')", [sre.siadCode, school.id]);
-      }
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
+    if (!toWrite.length) {
+      console.log("Nada a gravar.\n");
+      return;
     }
-    console.log(`✔ ${toWrite.length} escola(s) com SIAD preenchido.\n`);
+
+    // Um único UPDATE (rápido e atômico, mesmo com o banco remoto).
+    console.log(`Gravando ${toWrite.length} código(s) SIAD...`);
+    const cases = toWrite.map(() => "WHEN ? THEN ?").join(" ");
+    const caseParams = toWrite.flatMap(({ school, sre }) => [school.id, sre.siadCode]);
+    const ids = toWrite.map(({ school }) => school.id);
+    const [result] = await connection.query<ResultSetHeader>(
+      `UPDATE schools SET siadCode = CASE id ${cases} END
+        WHERE id IN (?) AND (siadCode IS NULL OR siadCode = '')`,
+      [...caseParams, ids],
+    );
+
+    // Conferência: lê de volta do banco.
+    const [check] = await connection.query<RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM schools WHERE siadCode IS NOT NULL AND siadCode <> ''",
+    );
+    console.log(`✔ ${result.affectedRows} escola(s) atualizada(s). Escolas com SIAD no banco agora: ${check[0].total}.\n`);
   } finally {
     await connection.end();
   }
