@@ -7,6 +7,7 @@ import { trpc } from "@/lib/trpc";
 import { CheckCircle2, Clock3, Search, UserRoundCheck, XCircle } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ScrollableList } from "@/components/ScrollableList";
 
 export default function AccessRequests() {
   const utils = trpc.useUtils();
@@ -68,9 +69,9 @@ export default function AccessRequests() {
           {requestsQuery.isLoading ? (
             <div className="p-10 text-center text-sm text-[#718277]">Carregando solicitações...</div>
           ) : filtered.length ? (
-            <div className="divide-y divide-[#edf2ed]">
+            <ScrollableList className="divide-y divide-[#edf2ed]">
               {filtered.map((entry: any) => (
-                <div key={entry.request.id} className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center">
+                <div key={entry.request.id} data-list-item className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center">
                   <div className="flex min-w-0 flex-1 items-start gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#e8f1e8] text-[#276249]"><UserRoundCheck className="size-5" /></div>
                     <div className="min-w-0">
@@ -97,7 +98,7 @@ export default function AccessRequests() {
                   </div>
                 </div>
               ))}
-            </div>
+            </ScrollableList>
           ) : (
             <div className="px-6 py-14 text-center">
               <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#e8f1e8] text-[#276249]"><CheckCircle2 className="size-6" /></div>
