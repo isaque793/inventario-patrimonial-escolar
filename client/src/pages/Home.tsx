@@ -12,7 +12,8 @@ import { canQueryInventoryOverview } from "@/lib/inventoryAccess";
 import { getInventorySubmissionRequirements } from "@/lib/inventorySubmission";
 import { buildHistoricalPrefill, shouldLookupHistorical, type HistoricalPrefill } from "@/lib/historicalPrefill";
 import { trpc } from "@/lib/trpc";
-import { Archive, ArrowDownToLine, History, Building2, CheckCircle2, ChevronRight, CircleAlert, ClipboardCheck, FileCheck2, FilePlus2, FileText, Landmark, Loader2, PencilLine, Plus, ScanLine, Search, Send, ShieldAlert, UserRoundCheck, UsersRound, X, XCircle } from "lucide-react";
+import { exportSchoolWorkspaceExcel } from "@/lib/exportSchoolWorkspaceExcel";
+import { Archive, ArrowDownToLine, History, Building2, CheckCircle2, ChevronRight, CircleAlert, ClipboardCheck, FileCheck2, FilePlus2, FileSpreadsheet, FileText, Landmark, Loader2, PencilLine, Plus, ScanLine, Search, Send, ShieldAlert, UserRoundCheck, UsersRound, X, XCircle } from "lucide-react";
 import React, { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -148,6 +149,7 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
     }
     return Array.from(grouped.values()).sort((a, b) => a.expenseCode.localeCompare(b.expenseCode, undefined, { numeric: true }));
   }, [overview?.items, categoriesQuery.data]);
+  const documentTypes = new Set(overview?.documents?.map((document: any) => document.documentType));
   // Progresso: ciclo iniciado, subcomissão e itens (documentos assinados são opcionais).
   const completionSteps = [Boolean(cycle), (overview?.members?.length ?? 0) >= 1, (overview?.items?.length ?? 0) > 0];
   const completion = completionSteps.filter(Boolean).length;
@@ -157,6 +159,22 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
     const existing = overview?.members?.map((member: any) => ({ name: member.name, jobTitle: member.jobTitle, masp: member.masp, isPresident: Boolean(member.isPresident) }));
     setCommittee(existing?.length ? existing : [createCommitteeMember(true)]);
     setCommitteeDialog(true);
+  };
+  const handleExportExcel = () => {
+    if (!overview) return;
+    try {
+      exportSchoolWorkspaceExcel({
+        year,
+        school: overview.school,
+        items: overview.items ?? [],
+        consolidated: schoolConsolidated,
+        issues: overview.issues ?? [],
+        categoryNames: Object.fromEntries((categoriesQuery.data ?? []).map((category: any) => [category.code, category.label])),
+        issueLabels,
+      });
+    } catch {
+      toast.error("Não foi possível gerar a planilha Excel.");
+    }
   };
   const openNotes = () => { setNotes({ problemsFound: overview?.notes?.problemsFound || "", quantityDivergences: overview?.notes?.quantityDivergences || "", valueDivergences: overview?.notes?.valueDivergences || "" }); setNotesDialog(true); };
   const handleSubmit = () => {
@@ -181,7 +199,7 @@ function SchoolWorkspace({ year, setYear, isManager, viewerId }: { year: number;
     {schoolsQuery.isLoading ? <LoadingPanel /> : !schoolsQuery.data?.length ? (isManager ? <EmptyState icon={Building2} title="Ainda não há escolas associadas">Registe a primeira escola para abrir o ciclo de inventário e atribuir os utilizadores responsáveis.</EmptyState> : <SchoolAccessRequestPanel pendingRequests={accessRequestsQuery.data ?? []} pending={requestAccess.isPending} onRequest={schoolId => requestAccess.mutate({ schoolId })} />) : <>
       <div className="rounded-2xl border border-[#dce7dc] bg-white p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-center"><Input value={schoolSearch} onChange={event => setSchoolSearch(event.target.value)} placeholder="Pesquisar por escola, código INEP ou município" className="h-10 border-[#d9e5da] bg-[#fbfdf9] sm:max-w-md" /><p className="text-xs text-[#718277]">{filteredSchools.length} de {schoolsQuery.data.length} escolas</p></div><div className="mt-3 flex gap-2 overflow-x-auto pb-1">{filteredSchools.length ? filteredSchools.map((school: any) => <button key={school.id} onClick={() => setSchoolId(school.id)} className={`relative min-w-[220px] rounded-2xl border px-4 py-3 text-left transition ${school.id === schoolId ? "border-[#1e604a] bg-[#e8f1e8] shadow-sm" : "border-[#dbe5dc] bg-white hover:border-[#9ebca7]"}`}><p className="flex items-center gap-2 truncate text-sm font-semibold text-[#1d3c31]">{school.name}{isManager && (pendingAccessCountsQuery.data?.[school.id] ?? 0) > 0 && <span className="inline-block size-2.5 shrink-0 rounded-full bg-red-500" title="Há solicitações de acesso pendentes" aria-label="Há solicitações de acesso pendentes" />}</p><p className="mt-1 truncate text-xs text-[#6b7e72]">INEP {school.schoolCode || "—"} · {school.city || "Município não informado"}</p></button>) : <p className="px-3 py-4 text-sm text-[#718277]">Nenhuma escola corresponde à pesquisa.</p>}</div></div>
       {overviewQuery.isLoading || !overview ? <LoadingPanel /> : <>
-        <Card className="overflow-hidden border-[#dce7dc] bg-white shadow-[0_8px_30px_rgba(19,61,45,.05)]"><CardContent className="grid gap-0 p-0 lg:grid-cols-[1.2fr_.8fr]"><div className="p-6 md:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><p className="text-[11px] font-bold uppercase tracking-[.17em] text-[#5d7667]">{year} · Carga patrimonial</p>{cycle && <StatusBadge status={cycle.status} />}</div><h2 className="mt-2 font-serif text-2xl font-semibold text-[#173b30]">{overview.school.name}</h2><p className="mt-2 text-sm text-[#62756a]">{overview.school.city || "Município não informado"}{overview.school.regionalOffice ? ` · ${overview.school.regionalOffice}` : ""}</p></div><div className="flex gap-2">{isManager && <Button variant="outline" onClick={() => { setEditingSchool(overview.school); setSchoolDialog(true); }}><PencilLine className="mr-2 size-4" />Editar</Button>}{isManager && <Button variant="outline" onClick={() => setAccessDialog(true)}><UsersRound className="mr-2 size-4" />Acessos</Button>}</div></div>
+        <Card className="overflow-hidden border-[#dce7dc] bg-white shadow-[0_8px_30px_rgba(19,61,45,.05)]"><CardContent className="grid gap-0 p-0 lg:grid-cols-[1.2fr_.8fr]"><div className="p-6 md:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><p className="text-[11px] font-bold uppercase tracking-[.17em] text-[#5d7667]">{year} · Carga patrimonial</p>{cycle && <StatusBadge status={cycle.status} />}</div><h2 className="mt-2 font-serif text-2xl font-semibold text-[#173b30]">{overview.school.name}</h2><p className="mt-2 text-sm text-[#62756a]">{overview.school.city || "Município não informado"}{overview.school.regionalOffice ? ` · ${overview.school.regionalOffice}` : ""}</p></div><div className="flex gap-2">{cycle && <Button variant="outline" onClick={handleExportExcel}><FileSpreadsheet className="mr-2 size-4" />Excel</Button>}{isManager && <Button variant="outline" onClick={() => { setEditingSchool(overview.school); setSchoolDialog(true); }}><PencilLine className="mr-2 size-4" />Editar</Button>}{isManager && <Button variant="outline" onClick={() => setAccessDialog(true)}><UsersRound className="mr-2 size-4" />Acessos</Button>}</div></div>
           <div className="mt-7 grid grid-cols-2 gap-3 md:grid-cols-4"><MiniStat label="Itens" value={String(overview.items?.length ?? 0)} /><MiniStat label="Valor registrado" value={money(totalValue)} /><MiniStat label="Pendências" value={String(overview.issues?.filter((issue: any) => issue.resolutionStatus !== "resolved").length ?? 0)} /><MiniStat label="Documentos" value={`${documentTypes.size}/3`} /></div>
         </div><div className="bg-[#123f34] p-6 text-white md:p-8"><p className="text-xs font-bold uppercase tracking-[.16em] text-[#bad2c2]">Progresso de submissão</p><p className="mt-3 font-serif text-4xl font-semibold">{Math.round((completion / completionSteps.length) * 100)}%</p><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-[#d9c07c]" style={{ width: `${(completion / completionSteps.length) * 100}%` }} /></div><p className="mt-4 text-sm leading-6 text-[#c7d8cd]">Inclua itens e um ou mais integrantes da subcomissão para enviar o inventário. Os documentos assinados são opcionais.</p>{cycle && editable && !submissionRequirements.ready && <div role="alert" className="mt-4 rounded-xl border border-amber-200/30 bg-white/10 px-3 py-3"><p className="text-xs font-bold uppercase tracking-[.12em] text-[#f0d98f]">Exigências pendentes</p><ul className="mt-2 space-y-1 text-xs leading-5 text-[#e2eee5]">{submissionRequirements.missing.map(requirement => <li key={requirement}>• {requirement}</li>)}</ul></div>}{canCreateCycle ? <Button onClick={() => schoolId && createCycle.mutate({ schoolId, year })} disabled={createCycle.isPending} className="mt-6 w-full bg-[#d9c07c] text-[#17372f] hover:bg-[#ead38f]"><Plus className="mr-2 size-4" />Iniciar inventário {year}</Button> : cycle && editable ? <Button onClick={handleSubmit} disabled={submitCycle.isPending} className="mt-6 w-full bg-[#d9c07c] text-[#17372f] hover:bg-[#ead38f]">{submitCycle.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}{submissionRequirements.ready ? "Submeter para validação" : "Concluir exigências para submeter"}</Button> : cycle ? <div className="mt-6 rounded-xl bg-white/10 px-3 py-3 text-sm text-[#dbe9df]">{cycle.status === "returned" ? "Corrija os apontamentos da equipe gestora e submeta novamente." : "A equipe gestora está acompanhando este inventário."}</div> : null}</div></CardContent></Card>
         {cycle && <>
