@@ -88,9 +88,27 @@ function csvText(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
+/** Traduz violação dos índices únicos da escola numa mensagem legível. */
+function rethrowDuplicateSchoolCode(error: unknown): never {
+  const text = [error, (error as { cause?: unknown })?.cause]
+    .map(part => (part instanceof Error ? part.message : String(part ?? "")))
+    .join(" ");
+  if (text.includes("school_siad_code_unique")) {
+    throw new TRPCError({ code: "CONFLICT", message: "Já existe outra escola com este código SIAD." });
+  }
+  if (text.includes("school_code_unique")) {
+    throw new TRPCError({ code: "CONFLICT", message: "Já existe outra escola com este código." });
+  }
+  if (text.includes("school_email_unique")) {
+    throw new TRPCError({ code: "CONFLICT", message: "Já existe outra escola com este e-mail." });
+  }
+  throw error;
+}
+
 const schoolFields = {
   name: z.string().trim().min(3).max(255),
   schoolCode: z.string().trim().max(64).optional().nullable(),
+  siadCode: z.string().trim().regex(/^\d{1,20}$/, "O código SIAD deve conter apenas números.").optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   regionalOffice: z.string().trim().max(160).optional().nullable(),
   email: z.string().trim().email().max(320).optional().nullable(),
@@ -233,7 +251,7 @@ export const appRouter = router({
     list: protectedProcedure.input(z.object({ viewerId: z.number().int().positive() })).query(async ({ ctx }) => getVisibleSchools(ctx.user)),
     create: adminProcedure.input(z.object(schoolFields)).mutation(async ({ input }) => {
       const db = await requireDb();
-      const result = await db.insert(schools).values(input);
+      const result = await db.insert(schools).values(input).catch(rethrowDuplicateSchoolCode);
       const school = await db.select().from(schools).where(eq(schools.id, Number(result[0].insertId))).limit(1);
       return school[0];
     }),
@@ -242,8 +260,10 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await assertSchoolAccess(ctx.user, input.schoolId);
         const db = await requireDb();
-        const { schoolId, ...fields } = input;
-        await db.update(schools).set(fields).where(eq(schools.id, schoolId));
+        const { schoolId, siadCode, ...otherFields } = input;
+        // O código SIAD liga a escola às cargas históricas: só a equipe gestora pode alterá-lo.
+        const fields = ctx.user.role === "admin" ? { ...otherFields, siadCode } : otherFields;
+        await db.update(schools).set(fields).where(eq(schools.id, schoolId)).catch(rethrowDuplicateSchoolCode);
         return { success: true };
       }),
     listMembers: protectedProcedure.input(schoolInput).query(async ({ ctx, input }) => {

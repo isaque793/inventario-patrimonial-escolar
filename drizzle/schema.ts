@@ -47,6 +47,8 @@ export const schools = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     schoolCode: varchar("schoolCode", { length: 64 }),
+    // Código SIAD da unidade administrativa: identifica a escola nas planilhas de carga patrimonial.
+    siadCode: varchar("siadCode", { length: 20 }),
     city: varchar("city", { length: 120 }),
     regionalOffice: varchar("regionalOffice", { length: 160 }),
     email: varchar("email", { length: 320 }),
@@ -61,6 +63,7 @@ export const schools = mysqlTable(
   },
   table => ({
     schoolCodeUnique: uniqueIndex("school_code_unique").on(table.schoolCode),
+    siadCodeUnique: uniqueIndex("school_siad_code_unique").on(table.siadCode),
     emailUnique: uniqueIndex("school_email_unique").on(table.email),
   }),
 );

@@ -442,6 +442,7 @@ export async function searchSchoolsForAccessRequest(query: string) {
       id: schools.id,
       name: schools.name,
       schoolCode: schools.schoolCode,
+      siadCode: schools.siadCode,
       city: schools.city,
       regionalOffice: schools.regionalOffice,
     })
@@ -449,6 +450,7 @@ export async function searchSchoolsForAccessRequest(query: string) {
     .where(
       sql`lower(${schools.name}) like ${pattern}
         or lower(coalesce(${schools.schoolCode}, '')) like ${pattern}
+        or coalesce(${schools.siadCode}, '') like ${pattern}
         or lower(coalesce(${schools.city}, '')) like ${pattern}`,
     )
     .orderBy(asc(schools.name))
