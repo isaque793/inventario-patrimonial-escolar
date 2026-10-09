@@ -1,5 +1,4 @@
 import * as XLSX from "xlsx-js-style";
-import { buildPendingIssuesWorkbook } from "./exportConsolidatedExcel";
 
 // Planilha da escola: mesmas abas do espaço da escola (inventário detalhado,
 // resumo consolidado e pendências), com a identidade visual das exportações do admin.
@@ -23,12 +22,10 @@ export type SchoolWorkspaceExportIssue = {
   propertyNumber?: string | null;
   quantity?: number | null;
   conservationState?: string | null;
-  location?: string | null;
   totalValue?: number | string | null;
-  originBody?: string | null;
   currentSituation?: string | null;
   pendingDescription: string;
-  measuresTaken?: string | null;
+  sei?: string | null;
 };
 
 export type SchoolWorkspaceExportInput = {
@@ -42,9 +39,8 @@ export type SchoolWorkspaceExportInput = {
 };
 
 export const INVENTORY_SHEET_HEADERS = ["Patrimônio", "Descrição", "Detalhes técnicos", "Código de despesa", "Elemento de despesa", "Conservação", "Quantidade", "Valor unitário (R$)", "Valor total (R$)", "Situação atual"];
+export const PENDING_SHEET_HEADERS = [...INVENTORY_SHEET_HEADERS, "Tipo de ocorrência", "SEI", "Pendência detalhada"];
 export const SUMMARY_SHEET_HEADERS = ["Código de despesa", "Elemento / item de despesa", "Quantidade", "Valor total (R$)"];
-
-const issueStatusLabels: Record<string, string> = { open: "Aberta", in_progress: "Em andamento", resolved: "Resolvida" };
 
 const thinBorder = {
   top: { style: "thin", color: { rgb: "D8E3DB" } },
@@ -56,12 +52,13 @@ const titleStyle = { fill: { patternType: "solid", fgColor: { rgb: "0B5D4B" } },
 const subtitleStyle = { fill: { patternType: "solid", fgColor: { rgb: "EAF3EE" } }, font: { bold: true, color: { rgb: "173B30" } }, alignment: { horizontal: "left", vertical: "center" }, border: thinBorder };
 const headerMain = { fill: { patternType: "solid", fgColor: { rgb: "0B5D4B" } }, font: { bold: true, color: { rgb: "FFFFFF" } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: thinBorder };
 const headerDetail = { ...headerMain, fill: { patternType: "solid", fgColor: { rgb: "2F6F5E" } } };
+const headerAction = { ...headerMain, fill: { patternType: "solid", fgColor: { rgb: "7A5A00" } } };
 const bodyStyle = { alignment: { vertical: "top", wrapText: true }, border: thinBorder };
 const bodyAltStyle = { ...bodyStyle, fill: { patternType: "solid", fgColor: { rgb: "F5F9F6" } } };
 const totalStyle = { fill: { patternType: "solid", fgColor: { rgb: "E8F2EB" } }, font: { color: { rgb: "173B30" }, bold: true }, alignment: { horizontal: "right", vertical: "center" }, border: thinBorder };
 
 type Align = "left" | "center" | "right";
-type ColumnSpec = { width: number; align?: Align; money?: boolean; header?: "main" | "detail" };
+type ColumnSpec = { width: number; align?: Align; money?: boolean; header?: "main" | "detail" | "action" };
 
 function setStyle(sheet: XLSX.WorkSheet, address: string, style: any) {
   const cell = sheet[address] ?? { t: "z", v: "" };
@@ -86,7 +83,7 @@ function buildTableSheet({ title, subtitle, headers, columns, rows, totalRow }: 
   for (let col = 0; col <= lastCol; col += 1) {
     setStyle(sheet, XLSX.utils.encode_cell({ r: 0, c: col }), titleStyle);
     setStyle(sheet, XLSX.utils.encode_cell({ r: 1, c: col }), subtitleStyle);
-    setStyle(sheet, XLSX.utils.encode_cell({ r: 2, c: col }), columns[col].header === "detail" ? headerDetail : headerMain);
+    setStyle(sheet, XLSX.utils.encode_cell({ r: 2, c: col }), columns[col].header === "detail" ? headerDetail : columns[col].header === "action" ? headerAction : headerMain);
   }
   for (let rowIdx = 0; rowIdx < rows.length; rowIdx += 1) {
     const base = rowIdx % 2 === 0 ? bodyAltStyle : bodyStyle;
@@ -106,6 +103,27 @@ function buildTableSheet({ title, subtitle, headers, columns, rows, totalRow }: 
   return sheet;
 }
 
+const INVENTORY_COLUMNS: ColumnSpec[] = [
+  { width: 18, align: "center" }, { width: 40 }, { width: 36 }, { width: 14, align: "center", header: "detail" }, { width: 32, header: "detail" },
+  { width: 16, align: "center", header: "detail" }, { width: 12, align: "right", header: "detail" }, { width: 18, align: "right", money: true, header: "detail" },
+  { width: 18, align: "right", money: true, header: "detail" }, { width: 24, align: "center" },
+];
+
+function inventoryRow(item: SchoolWorkspaceExportItem, categoryNames: Record<string, string>) {
+  return [
+    item.propertyNumber, item.description, item.technicalDetails ?? "", item.expenseCode, categoryNames[item.expenseCode] || "",
+    item.conservationState ?? "", Number(item.quantity || 0), item.unitValue == null || item.unitValue === "" ? "" : Number(item.unitValue),
+    Number(item.totalValue || 0), item.currentSituation ?? "",
+  ];
+}
+
+// A pendência é gravada junto com o item e copia o patrimônio e a descrição dele;
+// usa esses campos para recuperar o item completo do inventário.
+function findIssueItem(issue: SchoolWorkspaceExportIssue, items: SchoolWorkspaceExportItem[]) {
+  const sameProperty = items.filter(item => item.propertyNumber === (issue.propertyNumber ?? ""));
+  return sameProperty.find(item => item.description === issue.description) ?? (sameProperty.length === 1 ? sameProperty[0] : undefined);
+}
+
 export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated, issues, categoryNames, issueLabels }: SchoolWorkspaceExportInput) {
   const schoolLine = [school.name, school.schoolCode ? `INEP ${school.schoolCode}` : null, school.city, `Ano ${year}`].filter(Boolean).join(" · ");
 
@@ -115,16 +133,8 @@ export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated
     title: "INVENTÁRIO DETALHADO",
     subtitle: `${schoolLine} · Itens: ${items.length}`,
     headers: INVENTORY_SHEET_HEADERS,
-    columns: [
-      { width: 18, align: "center" }, { width: 40 }, { width: 36 }, { width: 14, align: "center", header: "detail" }, { width: 32, header: "detail" },
-      { width: 16, align: "center", header: "detail" }, { width: 12, align: "right", header: "detail" }, { width: 18, align: "right", money: true, header: "detail" },
-      { width: 18, align: "right", money: true, header: "detail" }, { width: 24, align: "center" },
-    ],
-    rows: items.map(item => [
-      item.propertyNumber, item.description, item.technicalDetails ?? "", item.expenseCode, categoryNames[item.expenseCode] || "",
-      item.conservationState ?? "", Number(item.quantity || 0), item.unitValue == null || item.unitValue === "" ? "" : Number(item.unitValue),
-      Number(item.totalValue || 0), item.currentSituation ?? "",
-    ]),
+    columns: INVENTORY_COLUMNS,
+    rows: items.map(item => inventoryRow(item, categoryNames)),
     totalRow: ["TOTAL REGISTADO", "", "", "", "", "", inventoryQuantity, "", inventoryTotal, ""],
   });
 
@@ -139,24 +149,20 @@ export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated
     totalRow: ["TOTAL GLOBAL", "", summaryQuantity, summaryTotal],
   });
 
-  // Reaproveita o modelo de pendências do painel administrativo.
-  const pendingSheet = buildPendingIssuesWorkbook(issues.map(issue => ({
-    Escola: school.name,
-    Tipo: issueLabels[issue.issueType] || "Outro",
-    Situação: issueStatusLabels[issue.resolutionStatus] || "Aberta",
-    Descrição: issue.description,
-    Património: issue.propertyNumber,
-    Quantidade: issue.quantity,
-    "Estado de conservação": issue.conservationState,
-    "Local / bloco": issue.location,
-    "Valor total (R$)": issue.totalValue,
-    "Órgão de origem": issue.originBody,
-    "Situação atual": issue.currentSituation,
-    Pendência: issue.pendingDescription,
-    Medidas: issue.measuresTaken,
-  }))).Sheets["Registro de Pendências"];
-  pendingSheet.A1.v = "PENDÊNCIAS E OCORRÊNCIAS";
-  pendingSheet.A2.v = `${schoolLine} · Total de ocorrências: ${issues.length}`;
+  const pendingSheet = buildTableSheet({
+    title: "PENDÊNCIAS E OCORRÊNCIAS",
+    subtitle: `${schoolLine} · Total de ocorrências: ${issues.length}`,
+    headers: PENDING_SHEET_HEADERS,
+    columns: [...INVENTORY_COLUMNS, { width: 22, align: "center", header: "action" }, { width: 22, align: "center", header: "action" }, { width: 50, header: "action" }],
+    rows: issues.map(issue => {
+      const item = findIssueItem(issue, items);
+      const itemColumns = item ? inventoryRow(item, categoryNames) : [
+        issue.propertyNumber ?? "", issue.description, "", "", "", issue.conservationState ?? "", Number(issue.quantity || 0), "",
+        Number(issue.totalValue || 0), issue.currentSituation ?? "",
+      ];
+      return [...itemColumns, issueLabels[issue.issueType] || "Outra situação", issue.sei ?? "", issue.pendingDescription];
+    }),
+  });
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, inventorySheet, "Inventário Detalhado");

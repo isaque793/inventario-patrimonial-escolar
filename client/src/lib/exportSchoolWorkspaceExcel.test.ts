@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx-js-style";
-import { buildSchoolWorkspaceWorkbook, INVENTORY_SHEET_HEADERS, SUMMARY_SHEET_HEADERS } from "./exportSchoolWorkspaceExcel";
+import { buildSchoolWorkspaceWorkbook, INVENTORY_SHEET_HEADERS, PENDING_SHEET_HEADERS, SUMMARY_SHEET_HEADERS } from "./exportSchoolWorkspaceExcel";
 
 const input = {
   year: 2026,
@@ -14,7 +14,7 @@ const input = {
     { expenseCode: "52.14", element: "Mobiliário", quantity: 2, totalValue: 600 },
   ],
   issues: [
-    { issueType: "not_found", resolutionStatus: "open", description: "Cadeira", propertyNumber: "123", quantity: 1, conservationState: null, location: "Bloco A", totalValue: "50", originBody: null, currentSituation: null, pendingDescription: "Não localizada", measuresTaken: null },
+    { issueType: "not_found", resolutionStatus: "open", description: "Armário de cozinha", propertyNumber: "48431583", quantity: 2, conservationState: "Regular", totalValue: "600", currentSituation: "Em uso", pendingDescription: "Não localizado no bloco B", sei: "1260.01.0001234/2026-12" },
   ],
   categoryNames: { "52.08": "Aparelhos de som", "52.14": "Mobiliário" },
   issueLabels: { not_found: "Bem não localizado" },
@@ -40,7 +40,8 @@ describe("buildSchoolWorkspaceWorkbook", () => {
 
     const pending = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets["Pendências e Ocorrências"], { header: 1, defval: "" });
     expect(pending[0][0]).toBe("PENDÊNCIAS E OCORRÊNCIAS");
-    expect(pending[3].slice(0, 2)).toEqual(["Bem não localizado", "Aberta"]);
+    expect(pending[2]).toEqual(PENDING_SHEET_HEADERS);
+    expect(pending[3]).toEqual([...inventory[4], "Bem não localizado", "1260.01.0001234/2026-12", "Não localizado no bloco B"]);
   });
 
   it("gera as abas mesmo sem pendências", () => {
