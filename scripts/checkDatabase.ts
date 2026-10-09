@@ -4,7 +4,8 @@
  *
  *   pnpm tsx scripts/checkDatabase.ts
  *
- * Para criar o que falta: pnpm drizzle-kit push
+ * Atenção (Windows): o drizzle-kit push não reconhece tabelas gravadas em
+ * minúsculas. Num banco de teste, recrie o banco vazio e rode o push nele.
  */
 import "dotenv/config";
 import { is } from "drizzle-orm";
@@ -35,8 +36,10 @@ async function main() {
     );
     const existing = new Map<string, Set<string>>();
     for (const row of rows) {
-      if (!existing.has(row.tableName)) existing.set(row.tableName, new Set());
-      existing.get(row.tableName)!.add(row.columnName);
+      // MySQL no Windows guarda nomes de tabela em minúsculas: comparar sem diferenciar.
+      const tableKey = String(row.tableName).toLowerCase();
+      if (!existing.has(tableKey)) existing.set(tableKey, new Set());
+      existing.get(tableKey)!.add(String(row.columnName).toLowerCase());
     }
 
     console.log(`\nBanco: ${database} em ${url.hostname}\n`);
@@ -44,13 +47,13 @@ async function main() {
     for (const value of Object.values(schema)) {
       if (!is(value, MySqlTable)) continue;
       const config = getTableConfig(value);
-      const columns = existing.get(config.name);
+      const columns = existing.get(config.name.toLowerCase());
       if (!columns) {
         console.log(`✖ ${config.name}: TABELA NÃO EXISTE`);
         problems += 1;
         continue;
       }
-      const missing = config.columns.map(column => column.name).filter(name => !columns.has(name));
+      const missing = config.columns.map(column => column.name).filter(name => !columns.has(name.toLowerCase()));
       if (missing.length) {
         console.log(`✖ ${config.name}: faltam colunas ${missing.join(", ")}`);
         problems += 1;
@@ -59,7 +62,7 @@ async function main() {
       }
     }
 
-    console.log(problems ? `\n${problems} tabela(s) com problema. Rode: pnpm drizzle-kit push\n` : "\nTudo certo: o banco tem todas as tabelas e colunas do schema.\n");
+    console.log(problems ? `\n${problems} tabela(s) com problema. Num banco de teste, recrie o banco vazio e rode: pnpm drizzle-kit push\n` : "\nTudo certo: o banco tem todas as tabelas e colunas do schema.\n");
   } finally {
     await connection.end();
   }

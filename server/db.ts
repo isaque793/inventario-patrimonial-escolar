@@ -28,13 +28,15 @@ export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       const url = new URL(process.env.DATABASE_URL);
+      // MySQL local (testes) normalmente não tem SSL; o Aiven exige.
+      const isLocalDatabase = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
       const pool = mysql.createPool({
         host: url.hostname,
         port: Number(url.port || 3306),
         user: decodeURIComponent(url.username),
         password: decodeURIComponent(url.password),
         database: url.pathname.replace(/^\//, ""),
-        ssl: { rejectUnauthorized: false },
+        ...(isLocalDatabase ? {} : { ssl: { rejectUnauthorized: false } }),
         // Mantém conexões vivas para evitar ECONNRESET do Aiven após idle.
         enableKeepAlive: true,
         keepAliveInitialDelay: 30_000, // 30 s

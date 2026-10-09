@@ -4,3 +4,5 @@ dist/
 .env.local
 *.log
 .DS_Store
+# Planilhas de cargas históricas (dados patrimoniais, não versionar)
+dados-historicos/
