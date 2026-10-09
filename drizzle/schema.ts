@@ -177,7 +177,10 @@ export const historicalInventoryLoads = mysqlTable(
   "historicalInventoryLoads",
   {
     id: int("id").autoincrement().primaryKey(),
-    schoolId: int("schoolId").notNull(),
+    // Escola da carga (informativo). Vazio quando o SIAD da planilha não
+    // corresponde a nenhuma escola: a busca é feita pelo número patrimonial.
+    schoolId: int("schoolId"),
+    siadCode: varchar("siadCode", { length: 20 }),
     year: int("year").notNull(),
     sourceFileName: varchar("sourceFileName", { length: 255 }),
     description: varchar("description", { length: 255 }),
