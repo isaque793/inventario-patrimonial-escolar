@@ -624,7 +624,7 @@ export function historicalPropertyNumberCandidates(propertyNumber: string) {
  * inventário aberto (preferSchoolId) e, depois, a do ano mais recente.
  * Só consulta: nunca cria nada no inventário atual.
  */
-export async function findHistoricalItem(propertyNumber: string, preferSchoolId?: number) {
+export async function findHistoricalItem(preferSchoolId: number | null, propertyNumber: string) {
   const candidates = historicalPropertyNumberCandidates(propertyNumber);
   if (!candidates.length) return null;
 
