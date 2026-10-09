@@ -13,6 +13,11 @@ import { cn } from "@/lib/utils";
  *     `data-list-footer` e a classe `sticky bottom-0`.
  *
  * Com `visible` itens ou menos, a lista mostra tudo e não cria rolagem.
+ * A largura mínima da tabela (min-w-[...]) não se propaga para fora: com
+ * `contain: inline-size` a lista não alarga a coluna da grade em telas estreitas
+ * (no celular a coluna crescia até a largura da tabela e era cortada pelo
+ * overflow-x-clip do layout, impedindo a rolagem). Assim a rolagem fica dentro dela.
+ *
  * Não usa ResizeObserver (ver notes/resizeobserver_investigacao.md): mede ao
  * renderizar e quando a janela muda de tamanho.
  */
@@ -64,7 +69,7 @@ export function ScrollableList({
       ref={ref}
       style={maxHeight ? { maxHeight } : undefined}
       className={cn(
-        "overflow-auto",
+        "overflow-auto [contain:inline-size]",
         "[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10",
         "[&_[data-list-footer]]:z-10",
         className,
