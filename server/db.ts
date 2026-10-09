@@ -333,6 +333,19 @@ export async function getManagementCycles(year: number) {
     .orderBy(asc(schools.name));
 }
 
+/** Todas as escolas com os utilizadores atribuídos, para acompanhar quem já começou o inventário. */
+export async function getSchoolsWithMembers() {
+  const db = await requireDb();
+  const [schoolRows, memberRows] = await Promise.all([
+    db.select().from(schools).orderBy(asc(schools.name)),
+    db
+      .select({ schoolId: schoolMemberships.schoolId, accessRole: schoolMemberships.accessRole, name: users.name, email: users.email })
+      .from(schoolMemberships)
+      .innerJoin(users, eq(schoolMemberships.userId, users.id)),
+  ]);
+  return schoolRows.map(school => ({ school, members: memberRows.filter(member => member.schoolId === school.id) }));
+}
+
 export async function getManagementItems(year: number) {
   const db = await requireDb();
   return db

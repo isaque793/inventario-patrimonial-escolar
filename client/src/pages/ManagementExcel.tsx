@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArchiveStatusPanel } from "@/components/ArchiveStatusPanel";
 import { exportPendingIssuesTemplate, exportSchoolControlWorkbook } from "@/lib/exportSchoolControlExcel";
 import { trpc } from "@/lib/trpc";
-import { Building2, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, Loader2, Send } from "lucide-react";
+import { Building2, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, Loader2, Send, Users } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ScrollableList } from "@/components/ScrollableList";
@@ -65,6 +65,7 @@ export default function ManagementExcel() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [issueStatus, setIssueStatus] = useState("all");
   const [schoolFilter, setSchoolFilter] = useState("all");
+  const [progressView, setProgressView] = useState<"started" | "notStarted">("started");
 
   const dashboardQuery = trpc.management.dashboard.useQuery({ year });
   const controlExportQuery = trpc.management.controlExport.useQuery({ year }, { enabled: false });
@@ -86,6 +87,11 @@ export default function ManagementExcel() {
           (schoolFilter === "all" || String(issue.schoolId) === schoolFilter),
       ),
     [dashboard?.pendingIssues, issueStatus, schoolFilter],
+  );
+
+  const visibleProgress = useMemo(
+    () => (dashboard?.schoolProgress || []).filter((entry: any) => (progressView === "started" ? entry.itemCount > 0 : entry.itemCount === 0)),
+    [dashboard?.schoolProgress, progressView],
   );
 
   const pendingExportRows = visibleIssues.map((issue: any) => ({
@@ -158,13 +164,77 @@ export default function ManagementExcel() {
         </Select>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Metric icon={Building2} label="Escolas com ciclo" value={metrics.schoolsWithCycles} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <Metric icon={Building2} label="Escolas em ciclo" value={metrics.schoolsStarted} />
+        <Metric icon={Users} label="Não iniciaram" value={metrics.schoolsNotStarted} tone="rose" />
         <Metric icon={Send} label="Submetidos" value={metrics.submitted} tone="amber" />
         <Metric icon={CheckCircle2} label="Validados" value={metrics.validated} />
         <Metric icon={CircleAlert} label="Pendências abertas" value={metrics.openIssues} tone="rose" />
         <Metric icon={Landmark} label="Valor consolidado" value={money(metrics.totalValue)} />
       </div>
+
+      <Card className="border-[#dce7dc]">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-[#203f33]">Andamento por escola</h2>
+              <p className="mt-0.5 text-xs leading-5 text-[#6b7d72]">
+                Escola em ciclo é a que já cadastrou pelo menos 1 item em {year}. Veja também quem é o usuário atribuído a cada uma.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button size="sm" variant={progressView === "started" ? "default" : "outline"} onClick={() => setProgressView("started")}>
+                Em ciclo ({metrics.schoolsStarted})
+              </Button>
+              <Button size="sm" variant={progressView === "notStarted" ? "default" : "outline"} onClick={() => setProgressView("notStarted")}>
+                Não iniciaram ({metrics.schoolsNotStarted})
+              </Button>
+            </div>
+          </div>
+
+          <ScrollableList>
+            <table className="w-full min-w-[680px] text-sm">
+              <thead className="border-y border-[#e4ece5] bg-[#f7faf6] text-[10px] font-bold uppercase tracking-[.1em] text-[#6c7e72]">
+                <tr>
+                  <th className="px-5 py-3 text-left">Escola</th>
+                  <th className="px-4 py-3 text-left">Usuário atribuído</th>
+                  {progressView === "started" && <th className="px-5 py-3 text-right">Itens</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleProgress.map((entry: any) => (
+                  <tr key={entry.school.id} data-list-item className="border-b border-[#edf2ed]">
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-[#234136]">{entry.school.name}</p>
+                      <p className="text-xs text-[#75867a]">{entry.school.city || "Sem município"}</p>
+                    </td>
+                    <td className="px-4 py-4">
+                      {entry.members.length ? (
+                        entry.members.map((member: any) => (
+                          <p key={member.email} className="text-xs text-[#52675b]">
+                            <span className="font-semibold text-[#234136]">{member.name || member.email}</span>
+                            {member.name ? ` · ${member.email}` : ""}
+                          </p>
+                        ))
+                      ) : (
+                        <span className="text-xs text-[#9aa89f]">Sem usuário atribuído</span>
+                      )}
+                    </td>
+                    {progressView === "started" && <td className="px-5 py-4 text-right font-semibold">{entry.itemCount}</td>}
+                  </tr>
+                ))}
+                {!visibleProgress.length && (
+                  <tr>
+                    <td colSpan={3} className="px-5 py-10 text-center text-sm text-[#718277]">
+                      {progressView === "started" ? "Nenhuma escola cadastrou itens ainda." : "Todas as escolas já iniciaram o inventário."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </ScrollableList>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="border-[#dce7dc]">

@@ -18,6 +18,7 @@ import {
   findSchoolMember,
   getCycleById,
   getManagementCycles,
+  getSchoolsWithMembers,
   getManagementControlExportData,
   getManagementIssues,
   getManagementItems,
@@ -601,15 +602,21 @@ export const appRouter = router({
         return { success: true, role: input.role };
       }),
     dashboard: adminProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
-      const [cycles, itemRows, issueRows] = await Promise.all([getManagementCycles(input.year), getManagementItems(input.year), getManagementIssues(input.year)]);
+      const [cycles, itemRows, issueRows, schoolsWithMembers] = await Promise.all([getManagementCycles(input.year), getManagementItems(input.year), getManagementIssues(input.year), getSchoolsWithMembers()]);
+      const itemCountBySchool = new Map<number, number>();
+      for (const row of itemRows) itemCountBySchool.set(row.school.id, (itemCountBySchool.get(row.school.id) ?? 0) + 1);
+      const schoolProgress = schoolsWithMembers.map(entry => ({ ...entry, itemCount: itemCountBySchool.get(entry.school.id) ?? 0 }));
       const totalValue = itemRows.reduce((sum, row) => sum + Number(row.item.totalValue), 0);
       const consolidated = consolidateExpenseItems(itemRows.map(row => row.item));
       return {
         cycles,
+        schoolProgress,
         pendingIssues: issueRows.map(row => ({ ...row.issue, school: row.school.name, schoolId: row.school.id, year: row.cycle.year })),
         consolidated,
         metrics: {
           schoolsWithCycles: cycles.length,
+          schoolsStarted: schoolProgress.filter(entry => entry.itemCount > 0).length,
+          schoolsNotStarted: schoolProgress.filter(entry => entry.itemCount === 0).length,
           submitted: cycles.filter(row => row.cycle.status === "submitted" || row.cycle.status === "under_review").length,
           validated: cycles.filter(row => row.cycle.status === "validated").length,
           openIssues: issueRows.filter(row => row.issue.resolutionStatus !== "resolved").length,
