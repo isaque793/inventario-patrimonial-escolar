@@ -141,7 +141,14 @@ export function parseSiadInventory(rows: SheetRows): SiadInventory {
 
     const quantity = Number(row[cQty] ?? 1) || 1;
     const total = Number(row[cValue] ?? 0);
-    if (!Number.isFinite(total)) throw new Error(`Valor inválido na linha ${index + 1}: ${row[cValue]}`);
+    if (!Number.isFinite(total)) {
+      const raw = String(row[cValue]);
+      throw new Error(
+        raw.startsWith("#")
+          ? `A coluna VALOR veio com erro do Excel (${raw}) a partir da linha ${index + 1}. Os valores se perderam na exportação: exporte a planilha de novo da SIAD.`
+          : `Valor inválido na linha ${index + 1}: ${raw}`,
+      );
+    }
 
     items.push({
       propertyNumber,
@@ -216,3 +223,33 @@ export function parseSreSchoolList(rows: SheetRows): SreSchool[] {
   }
   return schools;
 }
+
+const NAME_STOPWORDS = new Set([
+  "EE", "E", "ESCOLA", "ESTADUAL", "DE", "DA", "DO", "DAS", "DOS", "E", "PROF", "PROFA", "PROFESSOR", "PROFESSORA",
+  "DR", "DONA", "DOM", "PE", "PADRE", "CEL", "CORONEL", "ENG", "ENGENHEIRO", "DEP", "DEPUTADO", "GOV", "GOVERNADOR",
+  "PRES", "PRESIDENTE", "SAO", "SANTA", "SANTO", "UNIDADE", "COL", "COLEGIO", "INSTITUTO", "CENTRO",
+]);
+
+function significantWords(value: string) {
+  return normalizeText(value)
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .split(" ")
+    .filter(word => word.length >= 3 && !NAME_STOPWORDS.has(word));
+}
+
+/**
+ * Confere se o nome da unidade no cabeçalho da planilha ("E.E.DR GAMA
+ * CERQUEIRA-BELO VAL") é compatível com o nome da escola no sistema. A SIAD
+ * corta o nome em 30 caracteres e junta o município depois do "-", então
+ * basta uma palavra significativa em comum (aceitando palavra cortada).
+ * Serve de trava contra SIAD trocado na planilha ou no cadastro.
+ */
+export function unitNameMatchesSchool(unitName: string | null, schoolName: string) {
+  if (!unitName) return true;
+  const unitPart = unitName.replace(/^\s*(E\.?\s*E\.?|ESCOLA ESTADUAL)\s*/i, "").split("-")[0];
+  const unitWords = significantWords(unitPart);
+  const schoolWords = significantWords(schoolName);
+  if (!unitWords.length || !schoolWords.length) return true;
+  return unitWords.some(word => schoolWords.some(other => other === word || other.startsWith(word) || word.startsWith(other)));
+}
+

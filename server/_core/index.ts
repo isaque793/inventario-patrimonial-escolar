@@ -8,6 +8,7 @@ import { registerGoogleOAuth } from "./googleOAuth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { runSchemaUpgradesOnStartup } from "../schemaUpgrades";
 
 type RateLimitEntry = {
   count: number;
@@ -131,6 +132,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  // Garante colunas/tabelas novas antes de atender requisições (deploy seguro).
+  await runSchemaUpgradesOnStartup();
+
   const app = express();
   // Render sits behind one trusted reverse proxy. This makes req.ip use the
   // client address from X-Forwarded-For without allowing arbitrary callers to

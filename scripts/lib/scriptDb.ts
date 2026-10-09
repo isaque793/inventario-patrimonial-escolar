@@ -1,22 +1,18 @@
 import "dotenv/config";
 import mysql from "mysql2/promise";
+import { connectionOptionsFromUrl } from "../../server/schemaUpgrades";
 
-/** Abre uma conexão com o banco do DATABASE_URL (local sem SSL, Aiven com SSL). */
+/**
+ * Abre uma conexão com o banco do DATABASE_URL (local sem SSL, Aiven com SSL).
+ * Para usar outro arquivo de ambiente sem mexer no .env:
+ *   PowerShell:  $env:DOTENV_CONFIG_PATH=".env.production"; pnpm tsx scripts/...
+ */
 export async function connectFromEnv() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL não está definido no .env.");
-  const url = new URL(databaseUrl);
-  const database = url.pathname.replace(/^\//, "");
-  const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const connection = await mysql.createConnection({
-    host: url.hostname,
-    port: Number(url.port || 3306),
-    user: decodeURIComponent(url.username),
-    password: decodeURIComponent(url.password),
-    database,
-    ...(isLocal ? {} : { ssl: { rejectUnauthorized: false } }),
-  });
-  return { connection, database, host: url.hostname };
+  const options = connectionOptionsFromUrl(databaseUrl);
+  const connection = await mysql.createConnection(options);
+  return { connection, database: options.database, host: options.host };
 }
 
 export type { RowDataPacket, ResultSetHeader } from "mysql2/promise";

@@ -12,17 +12,38 @@ Cada planilha de carga traz no cabeçalho `COD. SIAD: 1265367`. Esse código
 precisa estar em `schools.siadCode`. Ele aparece no cadastro da escola, e só a
 equipe gestora pode alterá-lo.
 
-## Passo a passo (local ou produção)
+## Estrutura do banco
 
-Os comandos usam o `DATABASE_URL` do `.env`. Para produção, aponte o `.env`
-para o Aiven e **rode sempre o `--dry-run` antes**.
+As colunas e tabelas novas (`schools.siadCode`, `inventoryIssues.sei`,
+`historicalInventoryLoads`, `historicalInventoryItems`) são criadas
+**automaticamente quando o servidor inicia** (`server/schemaUpgrades.ts`).
+Esses ajustes só acrescentam estrutura: nada é apagado ou alterado. Por isso,
+o deploy no Render é seguro mesmo sem nenhum passo manual. O log mostra
+`[Schema] ...` com o que foi feito.
 
-1. **Preparar o banco** (cria as tabelas do histórico, a coluna `siadCode` e a
-   coluna `sei`, se faltarem; pode rodar mais de uma vez):
+Para ver antes o que seria feito num banco (por exemplo, o do Aiven):
+
+```
+pnpm tsx scripts/migrateHistoricalInventory.ts --dry-run
+```
+
+## Passo a passo da carga (local ou produção)
+
+Os comandos usam o `DATABASE_URL` do `.env`. Para a produção, crie um arquivo
+`.env.production` (já está no `.gitignore`) com o `DATABASE_URL` do Aiven e
+aponte para ele só na sessão do PowerShell, sem mexer no `.env`:
+
+```
+$env:DOTENV_CONFIG_PATH=".env.production"
+```
+
+Para voltar ao banco local, feche o terminal ou rode
+`Remove-Item Env:DOTENV_CONFIG_PATH`. **Rode sempre o `--dry-run` antes.**
+
+1. **Conferir o banco:**
 
    ```
    pnpm tsx scripts/migrateHistoricalInventory.ts --dry-run
-   pnpm tsx scripts/migrateHistoricalInventory.ts
    ```
 
 2. **Preencher o SIAD das escolas** a partir da lista da SRE:
@@ -59,12 +80,18 @@ para o Aiven e **rode sempre o `--dry-run` antes**.
 
    Para cada planilha, o script confere a quantidade e o valor com o
    `TOTAL GLOBAL`, recusa números patrimoniais repetidos, acha a escola pelo
-   SIAD e grava tudo numa transação por escola. Uma planilha com problema não
+   SIAD, confere se o nome da unidade no cabeçalho ("UN. ADMINISTRATIVA")
+   bate com o nome da escola (trava contra SIAD trocado) e grava tudo numa
+   transação por escola. Uma planilha com problema não
    impede as outras. Se a escola já tiver carga do mesmo ano, ela é pulada,
    a menos que se use `--replace`.
 
-   Para uma planilha sem SIAD no cabeçalho:
+   Para uma planilha sem SIAD no cabeçalho, ou cujo SIAD não bate com a escola
+   e você já conferiu manualmente:
    `--file "caminho.xlsx" --school-id 12 --year 2025`.
+
+   Se a coluna VALOR vier com `#VALUE!`, os valores se perderam na exportação:
+   exporte a planilha de novo da SIAD.
 
 ## Conferência
 

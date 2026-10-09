@@ -22,6 +22,7 @@
  *   --file        uma planilha .xlsx
  *   --year        ano da carga; opcional se a pasta se chamar 2025, 2024...
  *   --school-id   (só com --file) força a escola, ignorando o SIAD da planilha
+ *                 e a conferência do nome da unidade
  *   --dry-run     lê, valida e mostra o que faria, sem gravar nada
  *   --replace     se a escola já tiver carga do mesmo ano, apaga e reimporta
  *
@@ -30,7 +31,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { connectFromEnv, type ResultSetHeader, type RowDataPacket } from "./lib/scriptDb";
-import { parseSiadInventory, readSheetRows, toMoney, type SiadInventory } from "./lib/siadSpreadsheet";
+import { parseSiadInventory, readSheetRows, toMoney, unitNameMatchesSchool, type SiadInventory } from "./lib/siadSpreadsheet";
 
 type Args = { files: string[]; year: number; schoolId: number | null; dryRun: boolean; replace: boolean };
 type School = { id: number; name: string };
@@ -131,6 +132,15 @@ async function main() {
         school = rows[0] as School | undefined;
         if (!school) {
           log("error", `SIAD ${inventory.siadCode} (${inventory.unitName ?? "sem nome"}) não está em nenhuma escola. Preencha o código SIAD da escola e rode de novo.`);
+          continue;
+        }
+        // Trava contra SIAD trocado: o nome da unidade no cabeçalho tem que bater com a escola.
+        if (!unitNameMatchesSchool(inventory.unitName, school.name)) {
+          log(
+            "error",
+            `O SIAD ${inventory.siadCode} é da escola "${school.name}", mas a planilha é da unidade "${inventory.unitName}". ` +
+              "Confira o SIAD no cadastro da escola. Se tiver certeza, importe esta planilha com --file e --school-id.",
+          );
           continue;
         }
       }

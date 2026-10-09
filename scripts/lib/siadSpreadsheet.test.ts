@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { matchSchools, type DbSchool } from "./schoolMatching";
-import { normalizeCode, parseSiadInventory, parseSreSchoolList } from "./siadSpreadsheet";
+import { normalizeCode, parseSiadInventory, parseSreSchoolList, unitNameMatchesSchool } from "./siadSpreadsheet";
 
 const inventoryRows = [
   ["UN. ADMINISTRATIVA:  E.E.EDMUNDO PENA-BOM JESUS DO ", null, null, null, null, null, null],
@@ -52,6 +52,25 @@ describe("parseSiadInventory", () => {
   it("recusa planilha sem cabeçalho PATRIMÔNIO", () => {
     expect(() => parseSiadInventory([["qualquer coisa"]])).toThrow(/PATRIMÔNIO/);
   });
+});
+
+describe("unitNameMatchesSchool", () => {
+  it("aceita nome cortado pela SIAD e com município", () => {
+    expect(unitNameMatchesSchool("E.E.DR GAMA CERQUEIRA-BELO VAL", "EE DR GAMA CERQUEIRA")).toBe(true);
+    expect(unitNameMatchesSchool("EE ABELARDO DUARTE PASSO", "EE ABELARDO DUARTE PASSOS")).toBe(true);
+    expect(unitNameMatchesSchool("E.E.EDMUNDO PENA-BOM JESUS DO", "EE EDMUNDO PENA")).toBe(true);
+  });
+
+  it("recusa planilha de outra escola", () => {
+    expect(unitNameMatchesSchool("E.E.PADRE PEDRO THYSEN-PIEDADE", "EE PANDIÁ CALÓGERAS")).toBe(false);
+    expect(unitNameMatchesSchool("E.E.PADRE HEITOR-BARAO DE COCA", "EE PADRE PEDRO THYSEN")).toBe(false);
+  });
+});
+
+it("explica quando a coluna VALOR veio com #VALUE!", () => {
+  const rows = inventoryRows.map(row => [...row]);
+  rows[4][6] = "#VALUE!";
+  expect(() => parseSiadInventory(rows)).toThrow(/exporte a planilha de novo/);
 });
 
 describe("normalizeCode", () => {
