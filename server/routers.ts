@@ -54,7 +54,6 @@ import {
   canChangeAdminRole,
   canTransitionStatus,
   consolidateExpenseItems,
-  missingDocumentTypes,
   safeFileName,
   type CycleStatus,
 } from "./inventoryUtils";
@@ -564,15 +563,13 @@ export const appRouter = router({
     submit: protectedProcedure.input(z.object({ cycleId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const cycle = await assertEditableCycle(ctx.user, input.cycleId);
       const db = await requireDb();
-      const [items, members, documents] = await Promise.all([
+      // Documentos assinados são opcionais: não bloqueiam a submissão.
+      const [items, members] = await Promise.all([
         db.select({ id: inventoryItems.id }).from(inventoryItems).where(eq(inventoryItems.cycleId, cycle.id)),
         db.select({ id: committeeMembers.id }).from(committeeMembers).where(eq(committeeMembers.cycleId, cycle.id)),
-        db.select({ type: inventoryDocuments.documentType }).from(inventoryDocuments).where(eq(inventoryDocuments.cycleId, cycle.id)),
       ]);
       if (!items.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Inclua ao menos um item patrimonial antes de submeter." });
       if (!members.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Registre ao menos um integrante da subcomissão antes de submeter." });
-      const missing = missingDocumentTypes(documents.map(document => document.type));
-      if (missing.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Envie os três documentos assinados antes de submeter." });
       await db.update(inventoryCycles).set({ status: "submitted", submittedAt: new Date(), reviewNotes: null }).where(eq(inventoryCycles.id, cycle.id));
       await db.insert(validationHistory).values({ cycleId: cycle.id, action: "submitted", note: "Inventário submetido pela escola.", performedByUserId: ctx.user.id });
       return { success: true };

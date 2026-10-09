@@ -58,7 +58,17 @@ describe("início sem vínculo escolar", () => {
     expect(screen.getByText(/Ao menos um integrante da subcomissão/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Concluir exigências para submeter" }));
     expect(mutation.mutate).not.toHaveBeenCalled();
-    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("Ata de Abertura assinada"));
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("Ao menos um integrante da subcomissão"));
+    expect(mocks.toastError).not.toHaveBeenCalledWith(expect.stringContaining("Ata de Abertura"));
+  });
+
+  it("envia o inventário sem documentos assinados (são opcionais)", async () => {
+    schools = [{ id: 12, name: "Escola sem documentos", schoolCode: "31234567", city: "Belo Horizonte" }];
+    overview = { school: schools[0], cycle: { id: 57, status: "draft" }, items: [{ id: 1, totalValue: "25.00" }], members: [{ id: 1, name: "Ana", jobTitle: "Professora", masp: "1", isPresident: 1 }], documents: [], issues: [], history: [], notes: null };
+    render(<Home />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Submeter para validação" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Submeter para validação" }));
+    expect(mutation.mutate).toHaveBeenCalledWith({ cycleId: 57 });
   });
 
   it("envia o inventário com um integrante quando os demais requisitos foram concluídos", async () => {

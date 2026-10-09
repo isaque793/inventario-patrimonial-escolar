@@ -4,10 +4,10 @@ import type { TrpcContext } from "./_core/context";
 const mocks = vi.hoisted(() => {
   const updates: unknown[] = [];
   const history: unknown[] = [];
+  // Itens e integrantes da subcomissão; documentos não são consultados (opcionais).
   const selectResults: unknown[][] = [
     [{ id: 1 }],
     [{ id: 1 }],
-    [{ type: "opening_minutes" }, { type: "responsibility_term" }, { type: "closing_minutes" }],
   ];
   const db = {
     select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(async () => selectResults.shift() ?? []) })) })),
@@ -43,7 +43,7 @@ function userContext(): TrpcContext {
 }
 
 describe("inventory.submit", () => {
-  it("envia um ciclo elegível com um integrante, registra a data e cria o histórico de submissão", async () => {
+  it("envia um ciclo elegível com um integrante, sem documentos assinados, registra a data e cria o histórico de submissão", async () => {
     const result = await appRouter.createCaller(userContext()).inventory.submit({ cycleId: 77 });
 
     expect(result).toEqual({ success: true });
