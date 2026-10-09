@@ -47,6 +47,8 @@ export const schools = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     schoolCode: varchar("schoolCode", { length: 64 }),
+    // Código SIAD da unidade administrativa: identifica a escola nas planilhas de carga patrimonial.
+    siadCode: varchar("siadCode", { length: 20 }),
     city: varchar("city", { length: 120 }),
     regionalOffice: varchar("regionalOffice", { length: 160 }),
     email: varchar("email", { length: 320 }),
@@ -61,6 +63,7 @@ export const schools = mysqlTable(
   },
   table => ({
     schoolCodeUnique: uniqueIndex("school_code_unique").on(table.schoolCode),
+    siadCodeUnique: uniqueIndex("school_siad_code_unique").on(table.siadCode),
     emailUnique: uniqueIndex("school_email_unique").on(table.email),
   }),
 );
@@ -167,6 +170,66 @@ export const inventoryItems = mysqlTable(
   table => ({
     cycleIdx: index("item_cycle_idx").on(table.cycleId),
     expenseIdx: index("item_expense_idx").on(table.expenseCode),
+  }),
+);
+
+export const historicalInventoryLoads = mysqlTable(
+  "historicalInventoryLoads",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    schoolId: int("schoolId").notNull(),
+    year: int("year").notNull(),
+    sourceFileName: varchar("sourceFileName", { length: 255 }),
+    description: varchar("description", { length: 255 }),
+    importedAt: timestamp("importedAt").defaultNow().notNull(),
+  },
+  table => ({
+    schoolIdx: index("historical_load_school_idx").on(table.schoolId),
+    schoolYearIdx: index("historical_load_school_year_idx").on(
+      table.schoolId,
+      table.year,
+    ),
+  }),
+);
+
+export const historicalInventoryItems = mysqlTable(
+  "historicalInventoryItems",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    loadId: int("loadId").notNull(),
+
+    propertyNumber: varchar("propertyNumber", { length: 80 }).notNull(),
+
+    description: text("description"),
+    materialCode: varchar("materialCode", { length: 80 }),
+    itemCode: varchar("itemCode", { length: 80 }),
+
+    conservationState: varchar("conservationState", { length: 80 }),
+
+    quantity: int("quantity"),
+
+    unitValue: decimal("unitValue", {
+      precision: 14,
+      scale: 2,
+    }),
+
+    totalValue: decimal("totalValue", {
+      precision: 14,
+      scale: 2,
+    }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    loadIdx: index("historical_item_load_idx").on(table.loadId),
+
+    propertyIdx: index("historical_item_property_idx").on(
+      table.propertyNumber,
+    ),
+
+    loadPropertyIdx: uniqueIndex(
+      "historical_item_load_property_unique",
+    ).on(table.loadId, table.propertyNumber),
   }),
 );
 
