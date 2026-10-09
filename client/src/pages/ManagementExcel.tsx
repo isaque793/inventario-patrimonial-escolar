@@ -9,6 +9,7 @@ import { Building2, CheckCircle2, CircleAlert, ClipboardCheck, FileSpreadsheet, 
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { ScrollableList } from "@/components/ScrollableList";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -189,7 +190,7 @@ export default function ManagementExcel() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <ScrollableList>
             <table className="w-full min-w-[680px] text-sm">
               <thead className="border-y border-[#e4ece5] bg-[#f7faf6] text-[10px] font-bold uppercase tracking-[.1em] text-[#6c7e72]">
                 <tr>
@@ -201,7 +202,7 @@ export default function ManagementExcel() {
               </thead>
               <tbody>
                 {dashboard.cycles.map((entry: any) => (
-                  <tr key={entry.cycle.id} className="border-b border-[#edf2ed]">
+                  <tr key={entry.cycle.id} data-list-item className="border-b border-[#edf2ed]">
                     <td className="px-5 py-4">
                       <p className="font-semibold text-[#234136]">{entry.school.name}</p>
                       <p className="text-xs text-[#75867a]">{entry.school.city || "Sem município"}</p>
@@ -221,7 +222,7 @@ export default function ManagementExcel() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableList>
         </CardContent>
       </Card>
 
@@ -246,7 +247,7 @@ export default function ManagementExcel() {
               </Button>
             </div>
 
-            <div className="overflow-auto">
+            <ScrollableList>
               <table className="w-full min-w-[520px] text-sm">
                 <thead className="border-y border-[#e4ece5] bg-[#f7faf6] text-[10px] font-bold uppercase tracking-[.1em] text-[#6c7e72]">
                   <tr>
@@ -258,7 +259,7 @@ export default function ManagementExcel() {
                 </thead>
                 <tbody>
                   {dashboard.consolidated.map((line: any) => (
-                    <tr key={line.expenseCode} className="border-b border-[#edf2ed]">
+                    <tr key={line.expenseCode} data-list-item className="border-b border-[#edf2ed]">
                       <td className="px-5 py-3 font-mono text-xs text-[#245b48]">{line.expenseCode}</td>
                       <td className="px-4 py-3 text-xs text-[#52675b]">{categories[line.expenseCode] || "Não classificado"}</td>
                       <td className="px-4 py-3 text-right">{line.quantity}</td>
@@ -266,7 +267,7 @@ export default function ManagementExcel() {
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="bg-[#edf5ed]">
+                <tfoot data-list-footer className="sticky bottom-0 bg-[#edf5ed] shadow-[0_-1px_0_#dce7dc]">
                   <tr>
                     <td colSpan={3} className="px-5 py-3 text-right text-xs font-bold uppercase tracking-[.12em] text-[#526d5d]">
                       Total global
@@ -275,7 +276,7 @@ export default function ManagementExcel() {
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </ScrollableList>
           </CardContent>
         </Card>
 
@@ -320,10 +321,10 @@ export default function ManagementExcel() {
               </Select>
             </div>
 
-            <div className="max-h-[330px] divide-y divide-[#edf2ed] overflow-auto">
+            <ScrollableList className="divide-y divide-[#edf2ed]">
               {visibleIssues.length ? (
                 visibleIssues.map((issue: any) => (
-                  <div key={issue.id} className="px-5 py-4">
+                  <div key={issue.id} data-list-item className="px-5 py-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[.1em] text-[#688073]">
@@ -339,7 +340,7 @@ export default function ManagementExcel() {
               ) : (
                 <div className="px-5 py-10 text-center text-sm text-[#718277]">Não há pendências com estes filtros.</div>
               )}
-            </div>
+            </ScrollableList>
           </CardContent>
         </Card>
       </div>
