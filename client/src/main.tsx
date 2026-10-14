@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
+import { readableApiError } from "@/lib/apiResponse";
 import App from "./App";
 import "./index.css";
 
@@ -42,11 +43,15 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
-      fetch(input, init) {
-        return globalThis.fetch(input, {
+      async fetch(input, init) {
+        const response = await globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
         });
+        // Erros fora do formato do tRPC viram mensagem legível na tela.
+        const message = await readableApiError(response);
+        if (message) throw new Error(message);
+        return response;
       },
     }),
   ],

@@ -40,6 +40,7 @@ import {
   searchSchoolsForAccessRequest,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { TOO_MANY_LOGIN_ATTEMPTS_MESSAGE, failedLoginKey, failedLoginLimiter } from "./_core/rateLimit";
 import { ENV } from "./_core/env";
 import { sendGmailMessage } from "./_core/gmail";
 import { createSessionToken } from "./_core/session";
@@ -147,8 +148,17 @@ export const appRouter = router({
     login: publicProcedure
       .input(z.object({ email: z.string().email(), password: z.string() }))
       .mutation(async ({ input, ctx }) => {
+        // Só tentativas com senha errada contam para o bloqueio (por IP + e-mail).
+        const attemptKey = failedLoginKey(ctx.req, input.email);
+        if (failedLoginLimiter.isBlocked(attemptKey)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: TOO_MANY_LOGIN_ATTEMPTS_MESSAGE });
+        }
         const user = await verifyUserPassword(input.email, input.password);
-        if (!user) throw new Error("E-mail ou senha inválidos");
+        if (!user) {
+          failedLoginLimiter.hit(attemptKey);
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+        }
+        failedLoginLimiter.reset(attemptKey);
         await linkUserToSchoolByEmail(user.id, user.email);
         const token = await createSessionToken(user.id);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });

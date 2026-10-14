@@ -9,40 +9,26 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runSchemaUpgradesOnStartup } from "../schemaUpgrades";
+import { apiRateLimitKey, createRateLimiter, getClientIp } from "./rateLimit";
+import { COOKIE_NAME } from "@shared/const";
 
-type RateLimitEntry = {
-  count: number;
-  resetAt: number;
-};
-
-const rateLimitStore = new Map<string, RateLimitEntry>();
+// Limites contra abuso (janela de 15 min, contagem em memória).
+// - API: por usuário logado (cookie de sessão); sem sessão, por IP.
+// - Login: só tentativas ERRADAS contam, por IP + e-mail (ver auth.login).
+// - Cadastro / recuperação de senha: por IP, com folga para redes compartilhadas.
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const AUTH_RATE_LIMIT = 10;
-const API_RATE_LIMIT = 300;
+const API_RATE_LIMIT = 1500;
+const AUTH_RATE_LIMIT = 30;
 
-function getClientIp(req: Request): string {
-  return req.ip || req.socket.remoteAddress || "unknown";
-}
-
-function rateLimit(limit: number, keyPrefix: string) {
+function rateLimit(limit: number, keyFor: (req: Request) => string) {
+  const limiter = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, limit });
   return (req: Request, res: Response, next: NextFunction) => {
-    const now = Date.now();
-    const key = `${keyPrefix}:${getClientIp(req)}`;
-    const current = rateLimitStore.get(key);
-
-    if (!current || current.resetAt <= now) {
-      rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-      next();
+    const { allowed, retryAfterSeconds } = limiter.hit(keyFor(req));
+    if (!allowed) {
+      res.setHeader("Retry-After", retryAfterSeconds);
+      res.status(429).json({ error: "Muitas requisições em pouco tempo. Aguarde alguns minutos e tente novamente." });
       return;
     }
-
-    current.count += 1;
-    if (current.count > limit) {
-      res.setHeader("Retry-After", Math.ceil((current.resetAt - now) / 1000));
-      res.status(429).json({ error: "Muitas tentativas. Aguarde alguns minutos e tente novamente." });
-      return;
-    }
-
     next();
   };
 }
@@ -152,12 +138,11 @@ async function startServer() {
 
   // Protect file access and API endpoints against request flooding.
   // These middleware must run before the routes they protect.
-  app.use("/api/storage", rateLimit(60, "storage"));
-  app.use("/api/trpc", rateLimit(API_RATE_LIMIT, "api"));
-  app.use("/api/trpc/auth.login", rateLimit(AUTH_RATE_LIMIT, "auth-login"));
-  app.use("/api/trpc/auth.register", rateLimit(AUTH_RATE_LIMIT, "auth-register"));
-  app.use("/api/trpc/auth.requestPasswordReset", rateLimit(AUTH_RATE_LIMIT, "auth-reset-request"));
-  app.use("/api/trpc/auth.resetPassword", rateLimit(AUTH_RATE_LIMIT, "auth-reset-confirm"));
+  app.use("/api/storage", rateLimit(300, req => apiRateLimitKey(req, COOKIE_NAME)));
+  app.use("/api/trpc", rateLimit(API_RATE_LIMIT, req => apiRateLimitKey(req, COOKIE_NAME)));
+  app.use("/api/trpc/auth.register", rateLimit(AUTH_RATE_LIMIT, req => `register:${getClientIp(req)}`));
+  app.use("/api/trpc/auth.requestPasswordReset", rateLimit(AUTH_RATE_LIMIT, req => `reset-request:${getClientIp(req)}`));
+  app.use("/api/trpc/auth.resetPassword", rateLimit(AUTH_RATE_LIMIT, req => `reset-confirm:${getClientIp(req)}`));
   app.use("/api/auth/google", rateLimit(AUTH_RATE_LIMIT, "google-oauth"));
 
   registerStorageProxy(app);
