@@ -60,12 +60,14 @@ export function canTransitionStatus(from: CycleStatus, to: CycleStatus): boolean
   return transitionMap[from].includes(to);
 }
 
-export function hasSchoolAccess(userRole: "admin" | "user", hasMembership: boolean): boolean {
+export type UserRole = "admin" | "manager" | "user";
+
+export function hasSchoolAccess(userRole: UserRole, hasMembership: boolean): boolean {
   return userRole === "admin" || hasMembership;
 }
 
-export function canChangeAdminRole(currentRole: "admin" | "user", nextRole: "admin" | "user", administratorCount: number): boolean {
-  return !(currentRole === "admin" && nextRole === "user" && administratorCount <= 1);
+export function canChangeAdminRole(currentRole: UserRole, nextRole: UserRole, administratorCount: number): boolean {
+  return !(currentRole === "admin" && nextRole !== "admin" && administratorCount <= 1);
 }
 
 export function consolidateExpenseItems<T extends { expenseCode: string; quantity: number; totalValue: string | number }>(items: T[]) {

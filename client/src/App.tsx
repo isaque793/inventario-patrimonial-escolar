@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import React from "react";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
+import { useAuth } from "./_core/hooks/useAuth";
 import DashboardLayout from "./components/DashboardLayout";
 import { AdminGuard } from "./components/AdminGuard";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -17,11 +18,12 @@ import ManagementReview from "./pages/ManagementReview";
 import NotFound from "./pages/NotFound";
 import Validation from "./pages/Validation";
 
-function ManagementRoute() { return <AdminGuard><Management /></AdminGuard>; }
-function ValidationRoute() { return <AdminGuard><Validation /></AdminGuard>; }
-function ManagementReviewRoute() { return <AdminGuard><ManagementReview /></AdminGuard>; }
+function HomeRoute() { const { user } = useAuth(); return user?.role === "manager" ? <Redirect to="/gestao" /> : <Home />; }
+function ManagementRoute() { return <AdminGuard allowManager><Management /></AdminGuard>; }
+function ValidationRoute() { return <AdminGuard allowManager><Validation /></AdminGuard>; }
+function ManagementReviewRoute() { return <AdminGuard allowManager><ManagementReview /></AdminGuard>; }
 function AdministratorsRoute() { return <AdminGuard><AdminUsers /></AdminGuard>; }
-function AccessRequestsRoute() { return <AdminGuard><AccessRequests /></AdminGuard>; }
+function AccessRequestsRoute() { return <AdminGuard allowManager><AccessRequests /></AdminGuard>; }
 function Router() {
   return (
     <Switch>
@@ -31,7 +33,7 @@ function Router() {
       <Route>
         <DashboardLayout>
           <Switch>
-            <Route path="/" component={Home} />
+            <Route path="/" component={HomeRoute} />
             <Route path="/gestao" component={ManagementRoute} />
             <Route path="/validacao" component={ValidationRoute} />
             <Route path="/gestao/analise/:cycleId" component={ManagementReviewRoute} />

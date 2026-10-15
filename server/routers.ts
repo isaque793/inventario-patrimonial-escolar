@@ -8,6 +8,8 @@ import {
   inventoryIssues,
   inventoryItems,
   inventoryNotes,
+  passwordResetTokens,
+  schoolAccessRequests,
   schoolMemberships,
   schools,
   users,
@@ -44,7 +46,7 @@ import { TOO_MANY_LOGIN_ATTEMPTS_MESSAGE, failedLoginKey, failedLoginLimiter } f
 import { ENV } from "./_core/env";
 import { sendGmailMessage } from "./_core/gmail";
 import { createSessionToken } from "./_core/session";
-import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router, staffProcedure } from "./_core/trpc";
 import type { TrpcContext } from "./_core/context";
 import { systemRouter } from "./_core/systemRouter";
 import { storagePut } from "./storage";
@@ -287,18 +289,18 @@ export const appRouter = router({
     requestAccess: protectedProcedure
       .input(z.object({ schoolId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
-        if (ctx.user.role === "admin") {
+        if (ctx.user.role === "admin" || ctx.user.role === "manager") {
           throw new TRPCError({ code: "BAD_REQUEST", message: "A equipa gestora já possui acesso a todas as escolas." });
         }
         return requestSchoolAccess(ctx.user.id, input.schoolId);
       }),
-    pendingAccessRequests: adminProcedure
+    pendingAccessRequests: staffProcedure
       .input(schoolInput)
       .query(({ input }) => getPendingSchoolAccessRequests(input.schoolId)),
-    allPendingAccessRequests: adminProcedure
+    allPendingAccessRequests: staffProcedure
       .query(() => getAllPendingSchoolAccessRequests()),
-    pendingAccessCounts: adminProcedure.query(() => getPendingSchoolAccessCounts()),
-    reviewAccessRequest: adminProcedure
+    pendingAccessCounts: staffProcedure.query(() => getPendingSchoolAccessCounts()),
+    reviewAccessRequest: staffProcedure
       .input(z.object({ requestId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]) }))
       .mutation(async ({ ctx, input }) => reviewSchoolAccessRequest(input.requestId, ctx.user.id, input.decision)),
     listAssignableUsers: adminProcedure.query(() => listAssignableUsers()),
@@ -589,20 +591,20 @@ export const appRouter = router({
 
   management: router({
     listUsers: adminProcedure.query(() => listAssignableUsers()),
-    controlExport: adminProcedure.input(z.object({ year: yearInput })).query(({ input }) => getManagementControlExportData(input.year)),
-    reviewInventory: adminProcedure.input(z.object({ cycleId: z.number().int().positive() })).query(async ({ input }) => {
+    controlExport: staffProcedure.input(z.object({ year: yearInput })).query(({ input }) => getManagementControlExportData(input.year)),
+    reviewInventory: staffProcedure.input(z.object({ cycleId: z.number().int().positive() })).query(async ({ input }) => {
       const cycle = await getCycleById(input.cycleId);
       if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
       return getSchoolOverview(cycle.schoolId, cycle.year);
     }),
     setUserRole: adminProcedure
-      .input(z.object({ userId: z.number().int().positive(), role: z.enum(["admin", "user"]) }))
+      .input(z.object({ userId: z.number().int().positive(), role: z.enum(["admin", "manager", "user"]) }))
       .mutation(async ({ input }) => {
         const db = await requireDb();
         const target = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
         if (!target[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Utilizador não encontrado." });
         if (target[0].role === input.role) return { success: true, unchanged: true };
-        if (target[0].role === "admin" && input.role === "user") {
+        if (target[0].role === "admin" && input.role !== "admin") {
           const administrators = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
           if (!canChangeAdminRole(target[0].role, input.role, administrators.length)) {
             throw new TRPCError({ code: "BAD_REQUEST", message: "A plataforma deve manter pelo menos um administrador." });
@@ -611,7 +613,7 @@ export const appRouter = router({
         await db.update(users).set({ role: input.role }).where(eq(users.id, input.userId));
         return { success: true, role: input.role };
       }),
-    dashboard: adminProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
+    dashboard: staffProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
       const [cycles, itemRows, issueRows, schoolsWithMembers] = await Promise.all([getManagementCycles(input.year), getManagementItems(input.year), getManagementIssues(input.year), getSchoolsWithMembers()]);
       const itemCountBySchool = new Map<number, number>();
       for (const row of itemRows) itemCountBySchool.set(row.school.id, (itemCountBySchool.get(row.school.id) ?? 0) + 1);
@@ -634,7 +636,22 @@ export const appRouter = router({
         },
       };
     }),
-    changeStatus: adminProcedure
+    deleteUser: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      if (input.userId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Não é possível excluir a sua própria conta." });
+      const db = await requireDb();
+      const target = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+      if (!target[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Utilizador não encontrado." });
+      if (target[0].role === "admin") {
+        const administrators = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
+        if (administrators.length <= 1) throw new TRPCError({ code: "BAD_REQUEST", message: "A plataforma deve manter pelo menos um administrador." });
+      }
+      await db.delete(schoolMemberships).where(eq(schoolMemberships.userId, input.userId));
+      await db.delete(schoolAccessRequests).where(eq(schoolAccessRequests.userId, input.userId));
+      await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, input.userId));
+      await db.delete(users).where(eq(users.id, input.userId));
+      return { success: true };
+    }),
+    changeStatus: staffProcedure
       .input(z.object({ cycleId: z.number().int().positive(), status: z.enum(["under_review", "returned", "validated"]), note: z.string().trim().max(8000).optional().nullable() }))
       .mutation(async ({ ctx, input }) => {
         const cycle = await getCycleById(input.cycleId);
@@ -660,14 +677,14 @@ export const appRouter = router({
         }
         return { success: true };
       }),
-    retryArchive: adminProcedure.input(z.object({ cycleId: z.number().int().positive() })).mutation(async ({ input }) => {
+    retryArchive: staffProcedure.input(z.object({ cycleId: z.number().int().positive() })).mutation(async ({ input }) => {
       const cycle = await getCycleById(input.cycleId);
       if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
       const result = await archiveCycle(input.cycleId);
       if (!result.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
       return { success: true, location: result.location };
     }),
-    archiveStats: adminProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
+    archiveStats: staffProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
       const db = await requireDb();
       // Traz todos os ciclos validados do ano com seus dados de arquivamento e escola
       const rows = await db

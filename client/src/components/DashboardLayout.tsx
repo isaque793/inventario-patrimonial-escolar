@@ -80,7 +80,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
         <SidebarFooter className="border-t border-white/10 p-3">
           <DropdownMenu><DropdownMenuTrigger asChild><button className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d9c07c]">
             <Avatar className="size-9 border border-white/10"><AvatarFallback className="bg-[#255c4b] text-xs font-semibold text-white">{user?.name?.charAt(0).toUpperCase() || "U"}</AvatarFallback></Avatar>
-            {!isCollapsed && <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-white">{user?.name || "Utilizador"}</p><p className="mt-0.5 truncate text-xs text-[#aac6b6]">{user?.role === "admin" ? "Equipa gestora" : "Escola"}</p></div>}
+            {!isCollapsed && <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-white">{user?.name || "Utilizador"}</p><p className="mt-0.5 truncate text-xs text-[#aac6b6]">{user?.role === "admin" || user?.role === "manager" ? "Equipa gestora" : "Escola"}</p></div>}
           </button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive"><LogOut className="mr-2 size-4" />Terminar sessão</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
         </SidebarFooter>
       </Sidebar>

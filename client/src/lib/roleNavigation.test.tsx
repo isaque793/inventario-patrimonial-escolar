@@ -9,4 +9,8 @@ describe("navegação por perfil", () => {
   it("mantém o menu restrito para utilizadores de escola", () => {
     expect(getNavigationItemsForRole("user").map(item => item.label)).toEqual(["Meu inventário"]);
   });
+
+  it("limita o gestor às páginas de gestão, validação e solicitações", () => {
+    expect(getNavigationItemsForRole("manager").map(item => item.path)).toEqual(["/gestao", "/validacao", "/solicitacoes-acesso"]);
+  });
 });

@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: 9, name: "Admin", role: "admin" }, loading: false }) }));
 vi.mock("./components/DashboardLayout", () => ({ default: ({ children }: any) => <div data-testid="layout-admin">{children}</div> }));
 vi.mock("./components/AdminGuard", () => ({ AdminGuard: ({ children }: any) => <>{children}</> }));
 vi.mock("./components/ErrorBoundary", () => ({ default: ({ children }: any) => <>{children}</> }));

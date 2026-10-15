@@ -1,4 +1,4 @@
-export type AppRole = "admin" | "user" | undefined;
+export type AppRole = "admin" | "manager" | "user" | undefined;
 export type NavigationItem = { label: string; path: "/" | "/gestao" | "/validacao" | "/administradores" | "/solicitacoes-acesso"; icon: "schools" | "management" | "validation" | "administrators" | "requests" | "inventory" };
 
 export function getNavigationItemsForRole(role: AppRole): NavigationItem[] {
@@ -8,6 +8,13 @@ export function getNavigationItemsForRole(role: AppRole): NavigationItem[] {
       { icon: "validation", label: "Validação", path: "/validacao" },
       { icon: "schools", label: "Escolas", path: "/" },
       { icon: "administrators", label: "Administradores", path: "/administradores" },
+      { icon: "requests", label: "Solicitações de acesso", path: "/solicitacoes-acesso" },
+    ];
+  }
+  if (role === "manager") {
+    return [
+      { icon: "management", label: "Gestão e consolidação", path: "/gestao" },
+      { icon: "validation", label: "Validação", path: "/validacao" },
       { icon: "requests", label: "Solicitações de acesso", path: "/solicitacoes-acesso" },
     ];
   }
