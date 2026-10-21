@@ -591,7 +591,7 @@ export const appRouter = router({
 
   management: router({
     listUsers: adminProcedure.query(() => listAssignableUsers()),
-    controlExport: staffProcedure.input(z.object({ year: yearInput })).query(({ input }) => getManagementControlExportData(input.year)),
+    controlExport: staffProcedure.input(z.object({ year: yearInput, schoolId: z.number().int().positive().optional() })).query(({ input }) => getManagementControlExportData(input.year, input.schoolId)),
     reviewInventory: staffProcedure.input(z.object({ cycleId: z.number().int().positive() })).query(async ({ input }) => {
       const cycle = await getCycleById(input.cycleId);
       if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });

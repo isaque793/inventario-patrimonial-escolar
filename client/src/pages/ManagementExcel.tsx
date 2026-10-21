@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArchiveStatusPanel } from "@/components/ArchiveStatusPanel";
-import { exportPendingIssuesTemplate, exportSchoolControlWorkbook } from "@/lib/exportSchoolControlExcel";
+import { exportPendingIssuesTemplate } from "@/lib/exportSchoolControlExcel";
+import { buildSchoolsWorkspaceInput, exportSchoolWorkspaceExcel } from "@/lib/exportSchoolWorkspaceExcel";
 import { trpc } from "@/lib/trpc";
 import { Building2, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, Loader2, Send, Users } from "lucide-react";
 import React, { useMemo, useState } from "react";
@@ -20,6 +21,17 @@ const issueLabels: Record<string, string> = {
   donation: "Doação",
   guard_term: "Termo de guarda",
   other: "Outro",
+};
+
+// Mesmos rótulos da planilha individual da escola.
+const workbookIssueLabels: Record<string, string> = {
+  not_found: "Bem não localizado",
+  outside_register: "Bem fora da carga",
+  new_equipment: "Equipamento novo",
+  transfer: "Transferência",
+  donation: "Doação",
+  guard_term: "Termo de guarda",
+  other: "Outra situação",
 };
 
 const issueStatusLabels: Record<string, string> = {
@@ -65,10 +77,11 @@ export default function ManagementExcel() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [issueStatus, setIssueStatus] = useState("all");
   const [schoolFilter, setSchoolFilter] = useState("all");
+  const [exportSchoolId, setExportSchoolId] = useState("all");
   const [progressView, setProgressView] = useState<"started" | "notStarted">("started");
 
   const dashboardQuery = trpc.management.dashboard.useQuery({ year });
-  const controlExportQuery = trpc.management.controlExport.useQuery({ year }, { enabled: false });
+  const controlExportQuery = trpc.management.controlExport.useQuery({ year, schoolId: exportSchoolId === "all" ? undefined : Number(exportSchoolId) }, { enabled: false, retry: false, staleTime: 0, gcTime: 0 });
   const categoriesQuery = trpc.catalog.expenseCategories.useQuery();
 
   const dashboard = dashboardQuery.data;
@@ -87,6 +100,11 @@ export default function ManagementExcel() {
           (schoolFilter === "all" || String(issue.schoolId) === schoolFilter),
       ),
     [dashboard?.pendingIssues, issueStatus, schoolFilter],
+  );
+
+  const exportableSchools = useMemo(
+    () => (dashboard?.schoolProgress || []).filter((entry: any) => entry.itemCount > 0),
+    [dashboard?.schoolProgress],
   );
 
   const visibleProgress = useMemo(
@@ -133,10 +151,17 @@ export default function ManagementExcel() {
       return;
     }
 
-    if (exportSchoolControlWorkbook({ year, records: result.data })) {
-      toast.success("Resumo consolidado exportado com somente as escolas que possuem patrimônio, pendências ou divergências.");
-    } else {
-      toast.info("Não existem escolas com patrimônio, pendências ou divergências para exportar neste período.");
+    const records = result.data.filter((record: any) => record.items.length > 0 || record.issues.length > 0);
+    if (!records.length) {
+      toast.info("Não existem escolas com patrimônio ou pendências para exportar neste período.");
+      return;
+    }
+
+    try {
+      exportSchoolWorkspaceExcel(buildSchoolsWorkspaceInput({ year, records: records as any, categoryNames: categories, issueLabels: workbookIssueLabels }));
+      toast.success(records.length === 1 ? "Planilha da escola exportada." : `Resumo consolidado de ${records.length} escolas exportado.`);
+    } catch {
+      toast.error("Não foi possível gerar a planilha Excel.");
     }
   };
 
@@ -243,9 +268,23 @@ export default function ManagementExcel() {
               <div>
                 <h2 className="font-semibold text-[#203f33]">Resumo consolidado</h2>
                 <p className="mt-1 text-xs text-[#6b7d72]">
-                  O Excel usa o modelo de controle por escola e bem patrimonial e ignora escolas sem patrimônio, pendências ou divergências.
+                  O Excel segue o modelo da planilha individual da escola (inventário, resumo e pendências). Escolha todas as escolas ou uma específica.
                 </p>
               </div>
+              <div className="flex shrink-0 items-center gap-2">
+              <Select value={exportSchoolId} onValueChange={setExportSchoolId}>
+                <SelectTrigger className="h-8 w-[220px] bg-white text-xs" aria-label="Escola a exportar">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as escolas</SelectItem>
+                  {exportableSchools.map((entry: any) => (
+                    <SelectItem key={entry.school.id} value={String(entry.school.id)}>
+                      {entry.school.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 size="sm"
                 onClick={() => void exportConsolidated()}
@@ -255,6 +294,7 @@ export default function ManagementExcel() {
                 <FileSpreadsheet className="mr-1.5 size-4" />
                 {controlExportQuery.isFetching ? "Preparando" : "Excel"}
               </Button>
+              </div>
             </div>
 
             <ScrollableList>

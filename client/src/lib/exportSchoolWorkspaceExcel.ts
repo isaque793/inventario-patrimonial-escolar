@@ -4,6 +4,7 @@ import * as XLSX from "xlsx-js-style";
 // resumo consolidado e pendências), com a identidade visual das exportações do admin.
 
 export type SchoolWorkspaceExportItem = {
+  schoolName?: string;
   propertyNumber: string;
   description: string;
   technicalDetails?: string | null;
@@ -16,6 +17,7 @@ export type SchoolWorkspaceExportItem = {
 };
 
 export type SchoolWorkspaceExportIssue = {
+  schoolName?: string;
   issueType: string;
   resolutionStatus: string;
   description: string;
@@ -36,6 +38,8 @@ export type SchoolWorkspaceExportInput = {
   issues: SchoolWorkspaceExportIssue[];
   categoryNames: Record<string, string>;
   issueLabels: Record<string, string>;
+  // Exportação de várias escolas: acrescenta a coluna "Escola" nas abas de itens e pendências.
+  includeSchoolColumn?: boolean;
 };
 
 export const INVENTORY_SHEET_HEADERS = ["Patrimônio", "Descrição", "Detalhes técnicos", "Código de despesa", "Elemento de despesa", "Conservação", "Quantidade", "Valor unitário (R$)", "Valor total (R$)", "Situação atual"];
@@ -120,22 +124,28 @@ function inventoryRow(item: SchoolWorkspaceExportItem, categoryNames: Record<str
 // A pendência é gravada junto com o item e copia o patrimônio e a descrição dele;
 // usa esses campos para recuperar o item completo do inventário.
 function findIssueItem(issue: SchoolWorkspaceExportIssue, items: SchoolWorkspaceExportItem[]) {
-  const sameProperty = items.filter(item => item.propertyNumber === (issue.propertyNumber ?? ""));
+  const sameProperty = items.filter(item => item.propertyNumber === (issue.propertyNumber ?? "") && item.schoolName === issue.schoolName);
   return sameProperty.find(item => item.description === issue.description) ?? (sameProperty.length === 1 ? sameProperty[0] : undefined);
 }
 
-export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated, issues, categoryNames, issueLabels }: SchoolWorkspaceExportInput) {
+const SCHOOL_COLUMN: ColumnSpec = { width: 36, header: "action" };
+
+export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated, issues, categoryNames, issueLabels, includeSchoolColumn }: SchoolWorkspaceExportInput) {
+  const withSchool = (headers: string[], columns: ColumnSpec[], rows: unknown[][], names: Array<string | undefined>) =>
+    includeSchoolColumn
+      ? { headers: ["Escola", ...headers], columns: [SCHOOL_COLUMN, ...columns], rows: rows.map((row, index) => [names[index] ?? "", ...row]) }
+      : { headers, columns, rows };
+
   const schoolLine = [school.name, school.schoolCode ? `INEP ${school.schoolCode}` : null, school.city, `Ano ${year}`].filter(Boolean).join(" · ");
 
   const inventoryTotal = items.reduce((sum, item) => sum + Number(item.totalValue || 0), 0);
   const inventoryQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const inventoryTable = withSchool(INVENTORY_SHEET_HEADERS, INVENTORY_COLUMNS, items.map(item => inventoryRow(item, categoryNames)), items.map(item => item.schoolName));
   const inventorySheet = buildTableSheet({
     title: "INVENTÁRIO DETALHADO",
     subtitle: `${schoolLine} · Itens: ${items.length}`,
-    headers: INVENTORY_SHEET_HEADERS,
-    columns: INVENTORY_COLUMNS,
-    rows: items.map(item => inventoryRow(item, categoryNames)),
-    totalRow: ["TOTAL REGISTADO", "", "", "", "", "", inventoryQuantity, "", inventoryTotal, ""],
+    ...inventoryTable,
+    totalRow: [...(includeSchoolColumn ? [""] : []), "TOTAL REGISTADO", "", "", "", "", "", inventoryQuantity, "", inventoryTotal, ""],
   });
 
   const summaryTotal = consolidated.reduce((sum, row) => sum + Number(row.totalValue || 0), 0);
@@ -149,12 +159,10 @@ export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated
     totalRow: ["TOTAL GLOBAL", "", summaryQuantity, summaryTotal],
   });
 
-  const pendingSheet = buildTableSheet({
-    title: "PENDÊNCIAS E OCORRÊNCIAS",
-    subtitle: `${schoolLine} · Total de ocorrências: ${issues.length}`,
-    headers: PENDING_SHEET_HEADERS,
-    columns: [...INVENTORY_COLUMNS, { width: 22, align: "center", header: "action" }, { width: 22, align: "center", header: "action" }, { width: 50, header: "action" }],
-    rows: issues.map(issue => {
+  const pendingTable = withSchool(
+    PENDING_SHEET_HEADERS,
+    [...INVENTORY_COLUMNS, { width: 22, align: "center", header: "action" }, { width: 22, align: "center", header: "action" }, { width: 50, header: "action" }],
+    issues.map(issue => {
       const item = findIssueItem(issue, items);
       const itemColumns = item ? inventoryRow(item, categoryNames) : [
         issue.propertyNumber ?? "", issue.description, "", "", "", issue.conservationState ?? "", Number(issue.quantity || 0), "",
@@ -162,6 +170,12 @@ export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated
       ];
       return [...itemColumns, issueLabels[issue.issueType] || "Outra situação", issue.sei ?? "", issue.pendingDescription];
     }),
+    issues.map(issue => issue.schoolName),
+  );
+  const pendingSheet = buildTableSheet({
+    title: "PENDÊNCIAS E OCORRÊNCIAS",
+    subtitle: `${schoolLine} · Total de ocorrências: ${issues.length}`,
+    ...pendingTable,
   });
 
   const workbook = XLSX.utils.book_new();
@@ -174,4 +188,35 @@ export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated
 export function exportSchoolWorkspaceExcel(input: SchoolWorkspaceExportInput) {
   const slug = input.school.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
   XLSX.writeFile(buildSchoolWorkspaceWorkbook(input), `inventario-${slug || "escola"}-${input.year}.xlsx`);
+}
+
+type SchoolRecord = {
+  school: SchoolWorkspaceExportInput["school"];
+  items: SchoolWorkspaceExportItem[];
+  issues: SchoolWorkspaceExportIssue[];
+};
+
+// Planilha geral: mesmo modelo da planilha da escola, somando os dados das escolas informadas.
+// Com uma única escola, o resultado é idêntico ao da planilha individual.
+export function buildSchoolsWorkspaceInput({ year, records, categoryNames, issueLabels }: { year: number; records: SchoolRecord[]; categoryNames: Record<string, string>; issueLabels: Record<string, string> }): SchoolWorkspaceExportInput {
+  const single = records.length === 1;
+  const items = records.flatMap(record => record.items.map(item => ({ ...item, schoolName: record.school.name })));
+  const issues = records.flatMap(record => record.issues.map(issue => ({ ...issue, schoolName: record.school.name })));
+  const grouped = new Map<string, { expenseCode: string; element: string; quantity: number; totalValue: number }>();
+  for (const item of items) {
+    const row = grouped.get(item.expenseCode) ?? { expenseCode: item.expenseCode, element: categoryNames[item.expenseCode] || "", quantity: 0, totalValue: 0 };
+    row.quantity += Number(item.quantity || 0);
+    row.totalValue += Number(item.totalValue || 0);
+    grouped.set(item.expenseCode, row);
+  }
+  return {
+    year,
+    school: single ? records[0].school : { name: "Todas as escolas", city: `${records.length} escolas` },
+    items,
+    issues,
+    consolidated: Array.from(grouped.values()).sort((a, b) => a.expenseCode.localeCompare(b.expenseCode, undefined, { numeric: true })),
+    categoryNames,
+    issueLabels,
+    includeSchoolColumn: !single,
+  };
 }

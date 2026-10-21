@@ -366,10 +366,10 @@ export async function getManagementIssues(year: number) {
     .where(eq(inventoryCycles.year, year));
 }
 
-export async function getManagementControlExportData(year: number) {
+export async function getManagementControlExportData(year: number, schoolId?: number) {
   const db = await requireDb();
   const [schoolRows, cycleRows] = await Promise.all([
-    db.select().from(schools).orderBy(asc(schools.name)),
+    schoolId ? db.select().from(schools).where(eq(schools.id, schoolId)) : db.select().from(schools).orderBy(asc(schools.name)),
     db.select().from(inventoryCycles).where(eq(inventoryCycles.year, year)),
   ]);
   const cycleIds = cycleRows.map(cycle => cycle.id);
@@ -382,17 +382,23 @@ export async function getManagementControlExportData(year: number) {
     cycleIds.length ? db.select().from(inventoryNotes).where(inArray(inventoryNotes.cycleId, cycleIds)) : empty,
   ]);
   const cycleBySchool = new Map(cycleRows.map(cycle => [cycle.schoolId, cycle]));
-  const byCycle = <T extends { cycleId: number }>(rows: T[]) => rows.reduce<Map<number, T[]>>((groups, row) => {
-    groups.set(row.cycleId, [...(groups.get(row.cycleId) ?? []), row]);
+  const byCycle = <T extends { cycleId: number }>(rows: T[]) => {
+    const groups = new Map<number, T[]>();
+    for (const row of rows) {
+      const group = groups.get(row.cycleId);
+      if (group) group.push(row);
+      else groups.set(row.cycleId, [row]);
+    }
     return groups;
-  }, new Map());
+  };
   const itemsByCycle = byCycle(itemRows);
   const membersByCycle = byCycle(memberRows);
   const issuesByCycle = byCycle(issueRows);
   const documentsByCycle = byCycle(documentRows);
   const notesByCycle = new Map(noteRows.map(note => [note.cycleId, note]));
 
-  return schoolRows.map(school => {
+  // Escolas sem ciclo no ano não têm nada a exportar: ficam fora para reduzir o peso da resposta.
+  return schoolRows.filter(school => cycleBySchool.has(school.id)).map(school => {
     const cycle = cycleBySchool.get(school.id) ?? null;
     return {
       school,
