@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
     {
       school: { name: "EE Afonso Pena", schoolCode: "284", city: "Belo Horizonte" },
       cycle: { status: "validated" },
-      items: [],
+      items: [{ propertyNumber: "123", description: "Armário de aço", expenseCode: "52.14", quantity: 2, totalValue: "100.00" }],
       members: [],
       issues: [],
       documents: [],
@@ -24,8 +24,11 @@ const mocks = vi.hoisted(() => ({
 mocks.controlRefetch.mockResolvedValue({ data: mocks.controlRecords });
 
 vi.mock("@/lib/exportSchoolControlExcel", () => ({
-  exportSchoolControlWorkbook: mocks.exports.consolidated,
   exportPendingIssuesTemplate: mocks.exports.pending,
+}));
+vi.mock("@/lib/exportSchoolWorkspaceExcel", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/exportSchoolWorkspaceExcel")>()),
+  exportSchoolWorkspaceExcel: mocks.exports.consolidated,
 }));
 
 vi.mock("@/lib/trpc", () => ({
@@ -95,7 +98,7 @@ describe("exportações Excel no painel de gestão", () => {
     fireEvent.click(buttons[0]);
     await waitFor(() =>
       expect(mocks.exports.consolidated).toHaveBeenCalledWith(
-        expect.objectContaining({ year: expect.any(Number), records: mocks.controlRecords }),
+        expect.objectContaining({ year: expect.any(Number), includeSchoolColumn: false, school: expect.objectContaining({ name: "EE Afonso Pena" }) }),
       ),
     );
 

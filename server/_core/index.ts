@@ -143,7 +143,7 @@ async function startServer() {
   app.use("/api/trpc/auth.register", rateLimit(AUTH_RATE_LIMIT, req => `register:${getClientIp(req)}`));
   app.use("/api/trpc/auth.requestPasswordReset", rateLimit(AUTH_RATE_LIMIT, req => `reset-request:${getClientIp(req)}`));
   app.use("/api/trpc/auth.resetPassword", rateLimit(AUTH_RATE_LIMIT, req => `reset-confirm:${getClientIp(req)}`));
-  app.use("/api/auth/google", rateLimit(AUTH_RATE_LIMIT, "google-oauth"));
+  app.use("/api/auth/google", rateLimit(AUTH_RATE_LIMIT, () => "google-oauth"));
 
   registerStorageProxy(app);
   registerGoogleOAuth(app);

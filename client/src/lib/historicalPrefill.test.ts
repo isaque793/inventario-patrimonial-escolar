@@ -43,6 +43,7 @@ describe("historicalPrefill", () => {
       description: "AMPLIFICADOR DE AUDIO",
       expenseCode: "52.08",
       conservationState: "Bom",
+      quantity: 1,
       unitValue: "243.89",
       historicalConservationState: "Bom",
     });

@@ -17,6 +17,7 @@ export type HistoricalPrefill = {
   description: string | null;
   expenseCode: string | null;
   conservationState: string | null;
+  quantity: number;
   unitValue: string | null;
   historicalConservationState: string | null;
 };
@@ -52,6 +53,7 @@ export function buildHistoricalPrefill(item: HistoricalItem, validExpenseCodes: 
     description: item.description?.trim() || null,
     expenseCode: itemCodeToExpenseCode(item.itemCode, validExpenseCodes),
     conservationState: normalizeConservationState(item.conservationState),
+    quantity,
     unitValue: unit != null && Number.isFinite(Number(unit)) ? Number(unit).toFixed(2) : null,
     historicalConservationState: item.conservationState?.trim() || null,
   };

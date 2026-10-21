@@ -41,7 +41,7 @@ describe("exportação estruturada do controle escolar", () => {
     const [row] = buildSchoolControlTemplateRows([record]);
     expect(row[0]).toBe("EE Sem Movimento");
     expect(row[3]).toBe("");
-    expect(row[26]).toBe("Aberta — Armário não localizado: Conferir sala 03");
+    expect(row[16]).toBe("Aberta — Armário não localizado: Conferir sala 03");
   });
 
   it("monta o workbook sem escolas vazias e com formatação visual", () => {
@@ -85,31 +85,29 @@ describe("exportação estruturada do controle escolar", () => {
       "52.14",
       "2",
       "Bom",
-      2,
       350.25,
-      "",  // coluna L é fórmula (=J*K), sheet_to_json serializa como ""
+      700.5,
       "Em uso",
+      "Pendente",
     ]);
-    expect(sheet["!ref"]).toBe("A1:AD5");
-    expect(sheet["!autofilter"]).toEqual({ ref: "A4:AD5" });
-    expect(sheet["!cols"]?.[28]?.hidden).toBe(true);
-    expect(sheet["!cols"]?.[29]?.hidden).toBe(true);
-    expect(sheet["L5"]?.f).toBe('IF(OR(J5="",K5=""),"",J5*K5)');
+    expect(sheet["!ref"]).toBe("A1:T5");
+    expect(sheet["!autofilter"]).toEqual({ ref: "A4:T5" });
+    expect(sheet["!cols"]?.[18]?.hidden).toBe(true);
+    expect(sheet["!cols"]?.[19]?.hidden).toBe(true);
+    expect(sheet["J5"]?.z).toBe("R$ #,##0.00");
     expect(sheet["K5"]?.z).toBe("R$ #,##0.00");
-    expect(sheet["L5"]?.z).toBe("R$ #,##0.00");
     expect(sheet["A4"]?.s?.fill?.fgColor?.rgb).toBe("0B5D4B");
-    expect(sheet["Z5"]?.s?.fill?.fgColor?.rgb).toBe("E4F3E8");
 
     const lookup = workbook.Sheets["Localizar Escola"];
-    expect(lookup["B6"]?.f).toContain("$A$5:$A$5");
-    expect(lookup["I20"]?.f).toContain('$B$6&"|"&ROWS($I$20:I20)');
-    expect(lookup["I19"]?.v).toBeUndefined();
-    expect(lookup["!cols"]?.[8]?.hidden).toBe(true);
+    expect(lookup["B6"]?.f).toContain("$A$5:$A5");
+    expect(lookup["H19"]?.f).toContain('$B$6&"|"&ROWS($H$19:H19)');
+    expect(lookup["H18"]?.v).toBeUndefined();
+    expect(lookup["!cols"]?.[7]?.hidden).toBe(true);
     expect(lookup["!merges"]).toEqual([
-      XLSX.utils.decode_range("A1:I1"),
-      XLSX.utils.decode_range("A2:I2"),
+      XLSX.utils.decode_range("A1:H1"),
+      XLSX.utils.decode_range("A2:H2"),
       XLSX.utils.decode_range("A4:D4"),
-      XLSX.utils.decode_range("A18:H18"),
+      XLSX.utils.decode_range("A15:G15"),
     ]);
   });
 });

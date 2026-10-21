@@ -20,9 +20,10 @@ vi.mock("wouter", () => ({ useLocation: () => ["/", vi.fn()] }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ school: { list: { invalidate: vi.fn() } } }),
-    school: { list: { useQuery: () => { mocks.schoolListQuery(); return { data: schools, isLoading: false }; } }, listAssignableUsers: { useQuery: () => ({ data: [] }) }, listMembers: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, assignUser: { useMutation: () => mutation }, create: { useMutation: () => mutation }, update: { useMutation: () => mutation } },
+    school: { myAccessRequests: { useQuery: () => ({ data: [] }) }, pendingAccessCounts: { useQuery: () => ({ data: {} }) }, requestAccess: { useMutation: () => mutation }, searchForAccess: { useQuery: () => ({ data: [] }) }, pendingAccessRequests: { useQuery: () => ({ data: [] }) }, reviewAccessRequest: { useMutation: () => mutation }, list: { useQuery: () => { mocks.schoolListQuery(); return { data: schools, isLoading: false }; } }, listAssignableUsers: { useQuery: () => ({ data: [] }) }, listMembers: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, assignUser: { useMutation: () => mutation }, create: { useMutation: () => mutation }, update: { useMutation: () => mutation } },
     catalog: { expenseCategories: { useQuery: () => ({ data: [] }) } },
     inventory: {
+      lookupHistorical: { useQuery: () => ({ data: undefined, isFetching: false, isError: false }) },
       overview: { useQuery: (...args: unknown[]) => { (mocks.overviewQuery as unknown as (...queryArgs: unknown[]) => void)(...args); return { data: overview, isLoading: false, refetch: vi.fn() }; } }, createCycle: { useMutation: () => mutation }, setCommittee: { useMutation: () => mutation }, addItem: { useMutation: () => mutation }, updateItem: { useMutation: () => mutation }, deleteItem: { useMutation: () => mutation }, addIssue: { useMutation: () => mutation }, deleteIssue: { useMutation: () => mutation }, upsertNotes: { useMutation: () => mutation }, uploadDocument: { useMutation: () => mutation }, removeDocument: { useMutation: () => mutation }, submit: { useMutation: () => mutation },
     },
   },
@@ -37,7 +38,7 @@ afterEach(() => { cleanup(); role = "user"; schools = []; overview = undefined; 
 describe("início sem vínculo escolar", () => {
   it("exibe orientação e mantém a consulta de inventário desativada", () => {
     render(<Home />);
-    expect(screen.getByText("A equipa gestora ainda não associou o seu acesso a uma escola. Peça ao responsável pela plataforma para o configurar.")).toBeInTheDocument();
+    expect(screen.getByText("Encontre sua escola")).toBeInTheDocument();
     expect(mocks.overviewQuery).toHaveBeenCalledWith(expect.objectContaining({ schoolId: 0 }), expect.objectContaining({ enabled: false }));
   });
 
