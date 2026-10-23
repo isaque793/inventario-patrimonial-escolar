@@ -356,6 +356,24 @@ export async function getManagementItems(year: number) {
     .where(eq(inventoryCycles.year, year));
 }
 
+/** Totais por escola e código de despesa, calculados no banco: o painel não precisa dos itens em si. */
+export async function getManagementItemTotals(year: number) {
+  const db = await requireDb();
+  const rows = await db
+    .select({
+      schoolId: inventoryCycles.schoolId,
+      expenseCode: inventoryItems.expenseCode,
+      itemCount: sql<number>`count(*)`,
+      quantity: sql<number>`coalesce(sum(${inventoryItems.quantity}), 0)`,
+      totalValue: sql<string>`coalesce(sum(${inventoryItems.totalValue}), 0)`,
+    })
+    .from(inventoryItems)
+    .innerJoin(inventoryCycles, eq(inventoryItems.cycleId, inventoryCycles.id))
+    .where(eq(inventoryCycles.year, year))
+    .groupBy(inventoryCycles.schoolId, inventoryItems.expenseCode);
+  return rows.map(row => ({ ...row, itemCount: Number(row.itemCount), quantity: Number(row.quantity), totalValue: Number(row.totalValue) }));
+}
+
 export async function getManagementIssues(year: number) {
   const db = await requireDb();
   return db

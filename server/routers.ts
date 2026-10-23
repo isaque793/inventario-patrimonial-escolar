@@ -23,7 +23,7 @@ import {
   getSchoolsWithMembers,
   getManagementControlExportData,
   getManagementIssues,
-  getManagementItems,
+  getManagementItemTotals,
   getSchoolMembers,
   getMyPendingSchoolAccessRequests,
   getPendingSchoolAccessCounts,
@@ -614,12 +614,12 @@ export const appRouter = router({
         return { success: true, role: input.role };
       }),
     dashboard: staffProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
-      const [cycles, itemRows, issueRows, schoolsWithMembers] = await Promise.all([getManagementCycles(input.year), getManagementItems(input.year), getManagementIssues(input.year), getSchoolsWithMembers()]);
+      const [cycles, itemRows, issueRows, schoolsWithMembers] = await Promise.all([getManagementCycles(input.year), getManagementItemTotals(input.year), getManagementIssues(input.year), getSchoolsWithMembers()]);
       const itemCountBySchool = new Map<number, number>();
-      for (const row of itemRows) itemCountBySchool.set(row.school.id, (itemCountBySchool.get(row.school.id) ?? 0) + 1);
+      for (const row of itemRows) itemCountBySchool.set(row.schoolId, (itemCountBySchool.get(row.schoolId) ?? 0) + row.itemCount);
       const schoolProgress = schoolsWithMembers.map(entry => ({ ...entry, itemCount: itemCountBySchool.get(entry.school.id) ?? 0 }));
-      const totalValue = itemRows.reduce((sum, row) => sum + Number(row.item.totalValue), 0);
-      const consolidated = consolidateExpenseItems(itemRows.map(row => row.item));
+      const totalValue = itemRows.reduce((sum, row) => sum + row.totalValue, 0);
+      const consolidated = consolidateExpenseItems(itemRows);
       return {
         cycles,
         schoolProgress,
