@@ -64,6 +64,17 @@ const totalStyle = { fill: { patternType: "solid", fgColor: { rgb: "E8F2EB" } },
 type Align = "left" | "center" | "right";
 type ColumnSpec = { width: number; align?: Align; money?: boolean; header?: "main" | "detail" | "action" };
 
+// O Excel recusa o arquivo inteiro por uma célula inválida: remove caracteres de controle
+// (proibidos em XML), limita o texto a 32.767 caracteres e troca números inválidos por 0.
+const EXCEL_CELL_LIMIT = 32767;
+// eslint-disable-next-line no-control-regex
+const INVALID_XML_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
+export function sanitizeCell(value: unknown): unknown {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") return value.replace(INVALID_XML_CHARS, "").slice(0, EXCEL_CELL_LIMIT);
+  return value ?? "";
+}
+
 function setStyle(sheet: XLSX.WorkSheet, address: string, style: any) {
   const cell = sheet[address] ?? { t: "z", v: "" };
   cell.s = style;
@@ -74,7 +85,7 @@ function setStyle(sheet: XLSX.WorkSheet, address: string, style: any) {
 // dados zebrados e, opcionalmente, uma linha de total ao final.
 function buildTableSheet({ title, subtitle, headers, columns, rows, totalRow }: { title: string; subtitle: string; headers: string[]; columns: ColumnSpec[]; rows: unknown[][]; totalRow?: unknown[] }) {
   const lastCol = headers.length - 1;
-  const sheet = XLSX.utils.aoa_to_sheet([[title], [subtitle], headers, ...rows, ...(totalRow ? [totalRow] : [])]);
+  const sheet = XLSX.utils.aoa_to_sheet([[title], [subtitle], headers, ...rows, ...(totalRow ? [totalRow] : [])].map(row => row.map(sanitizeCell)));
   const dataEndRow = 3 + rows.length;
   const lastRow = dataEndRow + (totalRow ? 1 : 0);
   sheet["!ref"] = `A1:${XLSX.utils.encode_col(lastCol)}${lastRow}`;
@@ -187,7 +198,7 @@ export function buildSchoolWorkspaceWorkbook({ year, school, items, consolidated
 
 export function exportSchoolWorkspaceExcel(input: SchoolWorkspaceExportInput) {
   const slug = input.school.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
-  XLSX.writeFile(buildSchoolWorkspaceWorkbook(input), `inventario-${slug || "escola"}-${input.year}.xlsx`);
+  XLSX.writeFile(buildSchoolWorkspaceWorkbook(input), `inventario-${slug || "escola"}-${input.year}.xlsx`, { compression: true });
 }
 
 type SchoolRecord = {

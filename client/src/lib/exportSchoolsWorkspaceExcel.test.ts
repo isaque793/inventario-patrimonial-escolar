@@ -27,3 +27,16 @@ describe("planilha geral das escolas", () => {
     expect(inventory[2]?.[0]).toBe("Patrimônio");
   });
 });
+
+describe("células seguras para o Excel", () => {
+  it("remove caracteres inválidos, limita o tamanho e troca números inválidos", () => {
+    const bad = { ...item("9", "52.07", Number.NaN, Number.NaN), description: `A\u0000B\u000bC${"x".repeat(40000)}` };
+    const workbook = build([{ school: { name: "EE A" }, items: [bad], issues: [] }]);
+    const inventory = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets["Inventário Detalhado"], { header: 1, defval: "" });
+    const description = String(inventory[3]?.[1]);
+    expect(description.startsWith("ABC")).toBe(true);
+    expect(description.length).toBe(32767);
+    expect(inventory[3]?.[6]).toBe(0);
+    expect(inventory[3]?.[8]).toBe(0);
+  });
+});
