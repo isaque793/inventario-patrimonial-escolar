@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
-mocks.controlRefetch.mockResolvedValue({ data: mocks.controlRecords });
+mocks.controlRefetch.mockResolvedValue(mocks.controlRecords);
 
 vi.mock("@/lib/exportSchoolControlExcel", () => ({
   exportPendingIssuesTemplate: mocks.exports.pending,
@@ -33,6 +33,7 @@ vi.mock("@/lib/exportSchoolWorkspaceExcel", async importOriginal => ({
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
+    useUtils: () => ({ management: { controlExport: { fetch: mocks.controlRefetch } } }),
     management: {
       dashboard: {
         useQuery: () => ({
@@ -46,6 +47,7 @@ vi.mock("@/lib/trpc", () => ({
                 school: { name: "EE Afonso Pena", city: "Belo Horizonte" },
               },
             ],
+            schoolProgress: [{ school: { id: 1, name: "EE Afonso Pena", city: "Belo Horizonte" }, members: [], itemCount: 2 }],
             consolidated: [{ expenseCode: "52.14", quantity: 2, totalValue: "100.00" }],
             pendingIssues: [
               {
@@ -69,7 +71,6 @@ vi.mock("@/lib/trpc", () => ({
           },
         }),
       },
-      controlExport: { useQuery: () => ({ isFetching: false, refetch: mocks.controlRefetch }) },
       archiveStats: { useQuery: () => ({ isLoading: false, isFetching: false, data: null, refetch: vi.fn() }) },
       retryArchive: { useMutation: () => ({ isPending: false, variables: null, mutate: vi.fn() }) },
     },

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { ScrollableList } from "@/components/ScrollableList";
 
 const CURRENT_YEAR = new Date().getFullYear();
+const EXPORT_BATCH_SIZE = 10;
 
 const issueLabels: Record<string, string> = {
   not_found: "Bem não localizado",
@@ -81,7 +82,8 @@ export default function ManagementExcel() {
   const [progressView, setProgressView] = useState<"started" | "notStarted">("started");
 
   const dashboardQuery = trpc.management.dashboard.useQuery({ year });
-  const controlExportQuery = trpc.management.controlExport.useQuery({ year, schoolId: exportSchoolId === "all" ? undefined : Number(exportSchoolId) }, { enabled: false, retry: false, staleTime: 0, gcTime: 0 });
+  const utils = trpc.useUtils();
+  const [exporting, setExporting] = useState(false);
   const categoriesQuery = trpc.catalog.expenseCategories.useQuery();
 
   const dashboard = dashboardQuery.data;
@@ -145,23 +147,30 @@ export default function ManagementExcel() {
   };
 
   const exportConsolidated = async () => {
-    const result = await controlExportQuery.refetch();
-    if (result.error || !result.data) {
-      toast.error("Não foi possível preparar o resumo consolidado.");
-      return;
-    }
-
-    const records = result.data.filter((record: any) => record.items.length > 0 || record.issues.length > 0);
-    if (!records.length) {
-      toast.info("Não existem escolas com patrimônio ou pendências para exportar neste período.");
-      return;
-    }
-
+    setExporting(true);
     try {
-      exportSchoolWorkspaceExcel(buildSchoolsWorkspaceInput({ year, records: records as any, categoryNames: categories, issueLabels: workbookIssueLabels }));
+      // Busca em lotes pequenos para não sobrecarregar o servidor com uma resposta gigante.
+      const schoolIds = exportSchoolId === "all" ? exportableSchools.map((entry: any) => Number(entry.school.id)) : [Number(exportSchoolId)];
+      const records: any[] = [];
+      for (let start = 0; start < schoolIds.length; start += EXPORT_BATCH_SIZE) {
+        const batch = await utils.management.controlExport.fetch(
+          { year, schoolIds: schoolIds.slice(start, start + EXPORT_BATCH_SIZE) },
+          { staleTime: 0, retry: false },
+        );
+        records.push(...batch.filter((record: any) => record.items.length > 0 || record.issues.length > 0));
+      }
+
+      if (!records.length) {
+        toast.info("Não existem escolas com patrimônio ou pendências para exportar neste período.");
+        return;
+      }
+      exportSchoolWorkspaceExcel(buildSchoolsWorkspaceInput({ year, records, categoryNames: categories, issueLabels: workbookIssueLabels }));
       toast.success(records.length === 1 ? "Planilha da escola exportada." : `Resumo consolidado de ${records.length} escolas exportado.`);
-    } catch {
-      toast.error("Não foi possível gerar a planilha Excel.");
+    } catch (error) {
+      console.error("[Exportação consolidada]", error);
+      toast.error("Não foi possível preparar o resumo consolidado.", { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -288,11 +297,11 @@ export default function ManagementExcel() {
               <Button
                 size="sm"
                 onClick={() => void exportConsolidated()}
-                disabled={controlExportQuery.isFetching}
+                disabled={exporting}
                 className="bg-[#0c4a3e] hover:bg-[#083a31]"
               >
                 <FileSpreadsheet className="mr-1.5 size-4" />
-                {controlExportQuery.isFetching ? "Preparando" : "Excel"}
+                {exporting ? "Preparando" : "Excel"}
               </Button>
               </div>
             </div>

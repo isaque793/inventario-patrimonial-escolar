@@ -366,11 +366,12 @@ export async function getManagementIssues(year: number) {
     .where(eq(inventoryCycles.year, year));
 }
 
-export async function getManagementControlExportData(year: number, schoolId?: number) {
+export async function getManagementControlExportData(year: number, schoolIds?: number[]) {
   const db = await requireDb();
+  if (schoolIds && !schoolIds.length) return [];
   const [schoolRows, cycleRows] = await Promise.all([
-    schoolId ? db.select().from(schools).where(eq(schools.id, schoolId)) : db.select().from(schools).orderBy(asc(schools.name)),
-    db.select().from(inventoryCycles).where(eq(inventoryCycles.year, year)),
+    schoolIds ? db.select().from(schools).where(inArray(schools.id, schoolIds)).orderBy(asc(schools.name)) : db.select().from(schools).orderBy(asc(schools.name)),
+    db.select().from(inventoryCycles).where(schoolIds ? and(eq(inventoryCycles.year, year), inArray(inventoryCycles.schoolId, schoolIds)) : eq(inventoryCycles.year, year)),
   ]);
   const cycleIds = cycleRows.map(cycle => cycle.id);
   const empty = Promise.resolve([]);
