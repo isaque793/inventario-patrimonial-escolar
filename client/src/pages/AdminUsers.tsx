@@ -37,6 +37,17 @@ export default function AdminUsers() {
     },
     onError: error => toast.error(error.message),
   });
+  const accessQuery = trpc.management.schoolAccessStatus.useQuery();
+  const [confirmingSuspension, setConfirmingSuspension] = useState(false);
+  const setSuspension = trpc.management.setSchoolAccessSuspended.useMutation({
+    onSuccess: async result => {
+      toast.success(result.suspended ? "Acesso das escolas suspenso." : "Acesso das escolas reativado.");
+      setConfirmingSuspension(false);
+      await utils.management.schoolAccessStatus.invalidate();
+    },
+    onError: error => toast.error(error.message),
+  });
+  const schoolsSuspended = accessQuery.data?.suspended ?? false;
   const users = usersQuery.data ?? [];
   const administrators = useMemo(() => users.filter((user: any) => user.role === "admin"), [users]);
   const managers = useMemo(() => users.filter((user: any) => user.role === "manager"), [users]);
@@ -61,6 +72,34 @@ export default function AdminUsers() {
           Conceda acesso total a administradores de confiança ou o perfil de gestor, limitado a Gestão e consolidação, Validação e Solicitações de acesso. Também é possível excluir contas.
         </p>
       </div>
+      <Card className="border-[#dce7dc]">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-[#203f33]">Acesso das escolas</h2>
+              <Badge className={schoolsSuspended ? "border-0 bg-[#fde2e0] text-[#9b2c24]" : "border-0 bg-[#e8f1e8] text-[#246147]"}>{schoolsSuspended ? "Suspenso" : "Ativo"}</Badge>
+            </div>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-[#6b7d72]">
+              Enquanto estiver suspenso, contas de escola não conseguem entrar nem usar o sistema. Administradores e gestores não são afetados. Ao reiniciar o servidor, o estado volta ao valor de SCHOOL_ACCESS_SUSPENDED.
+            </p>
+          </div>
+          <Button variant={schoolsSuspended ? "default" : "destructive"} disabled={accessQuery.isLoading || setSuspension.isPending} onClick={() => (schoolsSuspended ? setSuspension.mutate({ suspended: false }) : setConfirmingSuspension(true))}>
+            {schoolsSuspended ? "Reativar escolas" : "Suspender escolas"}
+          </Button>
+        </CardContent>
+      </Card>
+      <Dialog open={confirmingSuspension} onOpenChange={setConfirmingSuspension}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspender o acesso das escolas</DialogTitle>
+            <DialogDescription>Confirma? As escolas serão desconectadas e não poderão entrar até a reativação. Administradores e gestores continuam normalmente.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmingSuspension(false)}>Cancelar</Button>
+            <Button variant="destructive" disabled={setSuspension.isPending} onClick={() => setSuspension.mutate({ suspended: true })}>Suspender escolas</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="border-[#dce7dc]"><CardContent className="p-5"><div className="flex size-10 items-center justify-center rounded-xl bg-[#e8f1e8] text-[#286149]"><ShieldCheck className="size-5" /></div><p className="mt-4 text-[10px] font-bold uppercase tracking-[.12em] text-[#6c8173]">Administradores ativos</p><p className="mt-1 text-3xl font-semibold text-[#1d4033]">{administrators.length}</p></CardContent></Card>
         <Card className="border-[#dce7dc]"><CardContent className="p-5"><div className="flex size-10 items-center justify-center rounded-xl bg-[#fff1c6] text-[#9a6510]"><UserCog className="size-5" /></div><p className="mt-4 text-[10px] font-bold uppercase tracking-[.12em] text-[#6c8173]">Gestores</p><p className="mt-1 text-3xl font-semibold text-[#1d4033]">{managers.length}</p></CardContent></Card>

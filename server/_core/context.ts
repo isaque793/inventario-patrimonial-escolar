@@ -3,6 +3,7 @@ import { parse } from "cookie";
 import { COOKIE_NAME } from "@shared/const";
 import type { User } from "../../drizzle/schema";
 import { getUserById } from "../db";
+import { isBlockedBySuspension } from "./schoolAccess";
 import { verifySessionToken } from "./session";
 
 export type TrpcContext = {
@@ -21,6 +22,7 @@ export async function createContext(opts: CreateExpressContextOptions): Promise<
       const userId = await verifySessionToken(token);
       if (userId) user = (await getUserById(userId)) ?? null;
     }
+    if (isBlockedBySuspension(user)) user = null;
   } catch {
     user = null;
   }

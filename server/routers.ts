@@ -45,6 +45,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { TOO_MANY_LOGIN_ATTEMPTS_MESSAGE, failedLoginKey, failedLoginLimiter } from "./_core/rateLimit";
 import { ENV } from "./_core/env";
 import { sendGmailMessage } from "./_core/gmail";
+import { SCHOOL_ACCESS_SUSPENDED_MESSAGE, isBlockedBySuspension, isSchoolAccessSuspended, setSchoolAccessSuspended } from "./_core/schoolAccess";
 import { createSessionToken } from "./_core/session";
 import { adminProcedure, protectedProcedure, publicProcedure, router, staffProcedure } from "./_core/trpc";
 import type { TrpcContext } from "./_core/context";
@@ -140,6 +141,7 @@ export const appRouter = router({
         register: publicProcedure
       .input(z.object({ email: z.string().email(), password: z.string().min(8), name: z.string().optional() }))
       .mutation(async ({ input, ctx }) => {
+        if (isSchoolAccessSuspended()) throw new TRPCError({ code: "FORBIDDEN", message: SCHOOL_ACCESS_SUSPENDED_MESSAGE });
         const user = await createUserWithPassword(input);
         await linkUserToSchoolByEmail(user!.id, user!.email);
         const token = await createSessionToken(user!.id);
@@ -161,6 +163,7 @@ export const appRouter = router({
           throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
         }
         failedLoginLimiter.reset(attemptKey);
+        if (isBlockedBySuspension(user)) throw new TRPCError({ code: "FORBIDDEN", message: SCHOOL_ACCESS_SUSPENDED_MESSAGE });
         await linkUserToSchoolByEmail(user.id, user.email);
         const token = await createSessionToken(user.id);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
@@ -591,6 +594,13 @@ export const appRouter = router({
 
   management: router({
     listUsers: adminProcedure.query(() => listAssignableUsers()),
+    schoolAccessStatus: adminProcedure.query(() => ({ suspended: isSchoolAccessSuspended() })),
+    setSchoolAccessSuspended: adminProcedure
+      .input(z.object({ suspended: z.boolean() }))
+      .mutation(({ input }) => {
+        setSchoolAccessSuspended(input.suspended);
+        return { suspended: isSchoolAccessSuspended() };
+      }),
     controlExport: staffProcedure.input(z.object({ year: yearInput, schoolIds: z.array(z.number().int().positive()).max(50).optional() })).query(({ input }) => getManagementControlExportData(input.year, input.schoolIds)),
     reviewInventory: staffProcedure.input(z.object({ cycleId: z.number().int().positive() })).query(async ({ input }) => {
       const cycle = await getCycleById(input.cycleId);

@@ -8,6 +8,8 @@ let usersState: Array<{ id: number; name: string; email: string; role: "admin" |
 const mutate = vi.fn();
 const deleteMutate = vi.fn();
 const invalidate = vi.fn().mockResolvedValue(undefined);
+const suspendMutate = vi.fn();
+let suspendedState = false;
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -15,8 +17,10 @@ vi.mock("@/lib/trpc", () => ({
       listUsers: { useQuery: () => ({ data: usersState, isLoading: false }) },
       setUserRole: { useMutation: () => ({ mutate, isPending: false }) },
       deleteUser: { useMutation: () => ({ mutate: deleteMutate, isPending: false }) },
+      schoolAccessStatus: { useQuery: () => ({ data: { suspended: suspendedState }, isLoading: false }) },
+      setSchoolAccessSuspended: { useMutation: () => ({ mutate: suspendMutate, isPending: false }) },
     },
-    useUtils: () => ({ management: { listUsers: { invalidate } } }),
+    useUtils: () => ({ management: { listUsers: { invalidate }, schoolAccessStatus: { invalidate } } }),
   },
 }));
 
@@ -24,9 +28,26 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import AdminUsers from "./AdminUsers";
 
-afterEach(() => { cleanup(); mutate.mockClear(); invalidate.mockClear(); });
+afterEach(() => { cleanup(); mutate.mockClear(); invalidate.mockClear(); suspendMutate.mockClear(); suspendedState = false; });
 
 describe("painel de administradores", () => {
+  it("suspende o acesso das escolas após confirmação", () => {
+    usersState = [{ id: 1, name: "Admin", email: "admin@teste.local", role: "admin" }];
+    render(<AdminUsers />);
+    fireEvent.click(screen.getByRole("button", { name: "Suspender escolas" }));
+    expect(suspendMutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Suspender escolas" }).at(-1)!);
+    expect(suspendMutate).toHaveBeenCalledWith({ suspended: true });
+  });
+
+  it("reativa o acesso das escolas direto, sem confirmação", () => {
+    usersState = [{ id: 1, name: "Admin", email: "admin@teste.local", role: "admin" }];
+    suspendedState = true;
+    render(<AdminUsers />);
+    fireEvent.click(screen.getByRole("button", { name: "Reativar escolas" }));
+    expect(suspendMutate).toHaveBeenCalledWith({ suspended: false });
+  });
+
   it("abre a confirmação e envia a promoção de um utilizador", () => {
     usersState = [{ id: 1, name: "Gestor", email: "gestor@teste.local", role: "admin" }, { id: 2, name: "Escola Piloto", email: "escola@teste.local", role: "user" }];
     render(<AdminUsers />);
