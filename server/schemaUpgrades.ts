@@ -96,6 +96,19 @@ export async function planSchemaUpgrades(connection: Queryable, database: string
   if (tables.has("inventoryissues") && !columns.has("inventoryissues.sei")) {
     steps.push({ description: "Adicionar coluna inventoryIssues.sei", sql: "ALTER TABLE `inventoryIssues` ADD COLUMN `sei` varchar(120) NULL" });
   }
+  if (tables.has("inventoryissues") && !columns.has("inventoryissues.itemid")) {
+    steps.push({ description: "Adicionar coluna inventoryIssues.itemId", sql: "ALTER TABLE `inventoryIssues` ADD COLUMN `itemId` int NULL" });
+    steps.push({ description: "Criar índice issue_item_idx", sql: "CREATE INDEX `issue_item_idx` ON `inventoryIssues` (`itemId`)" });
+    // Liga as pendências antigas ao bem quando só há um candidato (pelo número de patrimônio e, depois, pela descrição).
+    steps.push({
+      description: "Ligar pendências existentes aos bens pelo número de patrimônio",
+      sql: "UPDATE `inventoryIssues` i JOIN (SELECT `cycleId`, `propertyNumber`, MIN(`id`) AS itemId FROM `inventoryItems` GROUP BY `cycleId`, `propertyNumber` HAVING COUNT(*) = 1) m ON m.`cycleId` = i.`cycleId` AND m.`propertyNumber` = i.`propertyNumber` SET i.`itemId` = m.itemId WHERE i.`itemId` IS NULL",
+    });
+    steps.push({
+      description: "Ligar pendências existentes aos bens pela descrição",
+      sql: "UPDATE `inventoryIssues` i JOIN (SELECT `cycleId`, `description`, MIN(`id`) AS itemId FROM `inventoryItems` GROUP BY `cycleId`, `description` HAVING COUNT(*) = 1) m ON m.`cycleId` = i.`cycleId` AND (i.`description` = m.`description` OR i.`description` = CONCAT('Bem sem número de patrimônio: ', m.`description`)) SET i.`itemId` = m.itemId WHERE i.`itemId` IS NULL",
+    });
+  }
   if (!tables.has("historicalinventoryloads")) {
     steps.push({ description: "Criar tabela historicalInventoryLoads", sql: CREATE_HISTORICAL_LOADS });
   } else {

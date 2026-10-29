@@ -424,6 +424,7 @@ export const appRouter = router({
           if (pending) {
             await tx.insert(inventoryIssues).values({
               cycleId: input.cycleId,
+              itemId,
               issueType: pending.issueType,
               propertyNumber: input.propertyNumber,
               quantity,
@@ -459,6 +460,14 @@ export const appRouter = router({
           conservationState: z.string().trim().min(2).max(80),
           unitValue: z.number().min(0).max(999999999),
           currentSituation: z.string().trim().min(2).max(160),
+          pending: z.object({
+            issueId: z.number().int().positive(),
+            issueType: z.enum(["not_found", "outside_register", "new_equipment", "transfer", "donation", "guard_term", "other"]),
+            pendingDescription: z.string().trim().min(2).max(4000),
+            sei: z.string().trim().max(120).optional().nullable(),
+            measuresTaken: z.string().trim().max(4000).optional().nullable(),
+            resolutionStatus: z.enum(["open", "in_progress", "resolved"]),
+          }).optional().nullable(),
         }),
       )
       .mutation(async ({ ctx, input }) => {
@@ -490,9 +499,39 @@ export const appRouter = router({
           }
         }
 
-        const { itemId, cycleId, unitValue, quantity, ...fields } = input;
+        const { itemId, cycleId, unitValue, quantity, pending, ...fields } = input;
         const totalValue = calculateLineTotal(quantity, unitValue);
-        await db.update(inventoryItems).set({ ...fields, cycleId, quantity, unitValue: unitValue.toFixed(2), totalValue }).where(eq(inventoryItems.id, itemId));
+        // As pendências guardam uma cópia dos dados do bem; ao salvar, a cópia acompanha o bem.
+        const itemCopy = {
+          propertyNumber: fields.propertyNumber,
+          quantity,
+          description: fields.description,
+          conservationState: fields.conservationState,
+          currentSituation: fields.currentSituation,
+          totalValue,
+        };
+
+        await db.transaction(async tx => {
+          await tx.update(inventoryItems).set({ ...fields, cycleId, quantity, unitValue: unitValue.toFixed(2), totalValue }).where(eq(inventoryItems.id, itemId));
+          await tx.update(inventoryIssues).set(itemCopy).where(and(eq(inventoryIssues.cycleId, cycle.id), eq(inventoryIssues.itemId, itemId)));
+
+          if (pending) {
+            const issue = await tx.select().from(inventoryIssues).where(eq(inventoryIssues.id, pending.issueId)).limit(1);
+            if (!issue[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Pendência não encontrada." });
+            if (issue[0].cycleId !== cycle.id) throw accessDenied();
+            // Pendências antigas sem vínculo passam a apontar para este bem.
+            if (issue[0].itemId != null && issue[0].itemId !== itemId) throw accessDenied();
+            await tx.update(inventoryIssues).set({
+              ...itemCopy,
+              itemId,
+              issueType: pending.issueType,
+              pendingDescription: pending.pendingDescription,
+              sei: pending.sei ?? null,
+              measuresTaken: pending.measuresTaken ?? null,
+              resolutionStatus: pending.resolutionStatus,
+            }).where(eq(inventoryIssues.id, pending.issueId));
+          }
+        });
         return { id: itemId, totalValue };
       }),
     deleteItem: protectedProcedure.input(z.object({ itemId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {

@@ -241,6 +241,8 @@ export const inventoryIssues = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     cycleId: int("cycleId").notNull(),
+    // Bem a que a pendência se refere (nulo em pendências antigas que não puderam ser ligadas).
+    itemId: int("itemId"),
     issueType: mysqlEnum("issueType", [
       "not_found",
       "outside_register",
@@ -270,6 +272,7 @@ export const inventoryIssues = mysqlTable(
   table => ({
     cycleIdx: index("issue_cycle_idx").on(table.cycleId),
     statusIdx: index("issue_status_idx").on(table.resolutionStatus),
+    itemIdx: index("issue_item_idx").on(table.itemId),
   }),
 );
 

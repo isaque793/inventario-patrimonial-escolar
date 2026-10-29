@@ -30,7 +30,7 @@ function fakeDb(tables: Record<string, string[]>, indexes: Record<string, string
 
 describe("schemaUpgrades", () => {
   it("banco de produção antigo: acrescenta só o que falta, na ordem certa", async () => {
-    const { connection, executed } = fakeDb({ schools: ["id", "name", "schoolCode"], inventoryIssues: ["id", "sei"] });
+    const { connection, executed } = fakeDb({ schools: ["id", "name", "schoolCode"], inventoryIssues: ["id", "sei", "itemId"] });
     const steps = await applySchemaUpgrades(connection, "prod");
     expect(steps.map(step => step.description)).toEqual([
       "Adicionar coluna schools.siadCode",
@@ -46,7 +46,7 @@ describe("schemaUpgrades", () => {
     const { connection, executed } = fakeDb(
       {
         schools: ["id", "siadCode"],
-        inventoryissues: ["sei"],
+        inventoryissues: ["sei", "itemId"],
         historicalinventoryloads: ["id", "schoolId", "siadCode"],
         historicalinventoryitems: ["id"],
       },
@@ -60,7 +60,7 @@ describe("schemaUpgrades", () => {
     const { connection, executed } = fakeDb(
       {
         schools: ["id", "siadCode"],
-        inventoryIssues: ["sei"],
+        inventoryIssues: ["sei", "itemId"],
         historicalInventoryLoads: ["id", "schoolId!"],
         historicalInventoryItems: ["id"],
       },
@@ -72,6 +72,18 @@ describe("schemaUpgrades", () => {
       "Adicionar coluna historicalInventoryLoads.siadCode",
     ]);
     expect(executed[0]).toContain("MODIFY COLUMN `schoolId` int NULL");
+  });
+
+  it("pendências sem itemId: cria a coluna e liga as antigas aos bens, sem apagar nada", async () => {
+    const { connection, executed } = fakeDb({ schools: ["id", "siadCode"], inventoryIssues: ["id", "sei"] }, { schools: ["school_siad_code_unique"] });
+    const steps = await applySchemaUpgrades(connection, "prod");
+    expect(steps.map(step => step.description).slice(0, 4)).toEqual([
+      "Adicionar coluna inventoryIssues.itemId",
+      "Criar índice issue_item_idx",
+      "Ligar pendências existentes aos bens pelo número de patrimônio",
+      "Ligar pendências existentes aos bens pela descrição",
+    ]);
+    expect(executed.every(sql => !/(DROP|RENAME|MODIFY|DELETE)/i.test(sql))).toBe(true);
   });
 
   it("dry-run não executa nada", async () => {
