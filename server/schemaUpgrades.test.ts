@@ -86,6 +86,59 @@ describe("schemaUpgrades", () => {
     expect(executed.every(sql => !/(DROP|RENAME|MODIFY|DELETE)/i.test(sql))).toBe(true);
   });
 
+  it("separação pré-inventário/oficial: acrescenta colunas, cria o novo índice antes de remover o antigo", async () => {
+    const { connection, executed } = fakeDb(
+      {
+        schools: ["id", "siadCode"],
+        inventoryIssues: ["sei", "itemId"],
+        inventoryCycles: ["id", "schoolId", "year"],
+        inventoryItems: ["id", "cycleId"],
+        historicalInventoryLoads: ["id", "schoolId", "siadCode"],
+        historicalInventoryItems: ["id"],
+      },
+      { schools: ["school_siad_code_unique"], inventoryCycles: ["cycle_school_year_unique"] },
+    );
+    const steps = await applySchemaUpgrades(connection, "prod");
+    expect(steps.map(step => step.description)).toEqual([
+      "Adicionar coluna inventoryCycles.type (ciclos existentes = pré-inventário)",
+      "Criar índice único cycle_school_year_type_unique",
+      "Remover índice único antigo cycle_school_year_unique (substituído pelo que inclui o tipo)",
+      "Adicionar coluna inventoryItems.sourceCycleId",
+      "Adicionar coluna inventoryItems.sourceItemId",
+      "Adicionar coluna inventoryItems.importStatus",
+      "Adicionar coluna inventoryItems.confirmedAt",
+      "Adicionar coluna inventoryItems.confirmedBy",
+      "Criar índice único item_cycle_source_unique (impede importar a mesma origem duas vezes)",
+      "Criar índice item_cycle_import_status_idx",
+    ]);
+    expect(executed[0]).toContain("DEFAULT 'pre_inventory'");
+    // o único DROP permitido é o do índice antigo dos ciclos, depois de criado o novo
+    const drops = executed.filter(sql => /\bDROP\b/i.test(sql));
+    expect(drops).toEqual(["DROP INDEX `cycle_school_year_unique` ON `inventoryCycles`"]);
+    expect(executed.indexOf(drops[0])).toBeGreaterThan(executed.findIndex(sql => sql.includes("cycle_school_year_type_unique")));
+    expect(executed.every(sql => !/\b(DELETE|RENAME|MODIFY|UPDATE)\b/i.test(sql))).toBe(true);
+  });
+
+  it("separação já aplicada: não repete nada", async () => {
+    const { connection, executed } = fakeDb(
+      {
+        schools: ["id", "siadCode"],
+        inventoryIssues: ["sei", "itemId"],
+        inventoryCycles: ["id", "type"],
+        inventoryItems: ["sourceCycleId", "sourceItemId", "importStatus", "confirmedAt", "confirmedBy"],
+        historicalInventoryLoads: ["id", "schoolId", "siadCode"],
+        historicalInventoryItems: ["id"],
+      },
+      {
+        schools: ["school_siad_code_unique"],
+        inventoryCycles: ["cycle_school_year_type_unique"],
+        inventoryItems: ["item_cycle_source_unique", "item_cycle_import_status_idx"],
+      },
+    );
+    expect(await applySchemaUpgrades(connection, "prod")).toEqual([]);
+    expect(executed).toEqual([]);
+  });
+
   it("dry-run não executa nada", async () => {
     const { connection, executed } = fakeDb({ schools: ["id"], inventoryIssues: ["id"] });
     const steps = await applySchemaUpgrades(connection, "prod", { dryRun: true });

@@ -9,7 +9,8 @@
  * Regras para acrescentar um passo aqui:
  *   - só CREATE TABLE IF NOT EXISTS / ADD COLUMN NULL / CREATE INDEX /
  *     tornar uma coluna opcional (NOT NULL -> NULL);
- *   - nunca apagar, renomear ou mudar tipo de nada;
+ *   - nunca apagar, renomear ou mudar tipo de nada (única exceção documentada
+ *     abaixo: troca do índice único dos ciclos);
  *   - o código antigo tem que continuar funcionando depois do passo.
  *
  * Nomes de tabela são comparados em minúsculas (MySQL no Windows).
@@ -108,6 +109,56 @@ export async function planSchemaUpgrades(connection: Queryable, database: string
       description: "Ligar pendências existentes aos bens pela descrição",
       sql: "UPDATE `inventoryIssues` i JOIN (SELECT `cycleId`, `description`, MIN(`id`) AS itemId FROM `inventoryItems` GROUP BY `cycleId`, `description` HAVING COUNT(*) = 1) m ON m.`cycleId` = i.`cycleId` AND (i.`description` = m.`description` OR i.`description` = CONCAT('Bem sem número de patrimônio: ', m.`description`)) SET i.`itemId` = m.itemId WHERE i.`itemId` IS NULL",
     });
+  }
+  // Separação pré-inventário / inventário oficial. Única exceção à regra de
+  // "nunca apagar": o índice único antigo (escola, ano) é trocado por (escola,
+  // ano, tipo), e só é removido depois que o novo existe. Os ciclos já
+  // existentes ficam como pré-inventário pelo valor padrão da coluna.
+  if (tables.has("inventorycycles")) {
+    if (!columns.has("inventorycycles.type")) {
+      steps.push({
+        description: "Adicionar coluna inventoryCycles.type (ciclos existentes = pré-inventário)",
+        sql: "ALTER TABLE `inventoryCycles` ADD COLUMN `type` enum('pre_inventory','official') NOT NULL DEFAULT 'pre_inventory'",
+      });
+    }
+    if (!indexes.has("inventorycycles.cycle_school_year_type_unique")) {
+      steps.push({
+        description: "Criar índice único cycle_school_year_type_unique",
+        sql: "CREATE UNIQUE INDEX `cycle_school_year_type_unique` ON `inventoryCycles` (`schoolId`, `year`, `type`)",
+      });
+    }
+    if (indexes.has("inventorycycles.cycle_school_year_unique")) {
+      steps.push({
+        description: "Remover índice único antigo cycle_school_year_unique (substituído pelo que inclui o tipo)",
+        sql: "DROP INDEX `cycle_school_year_unique` ON `inventoryCycles`",
+      });
+    }
+  }
+  if (tables.has("inventoryitems")) {
+    const itemColumns: [string, string][] = [
+      ["sourcecycleid", "`sourceCycleId` int NULL"],
+      ["sourceitemid", "`sourceItemId` int NULL"],
+      ["importstatus", "`importStatus` enum('pending_confirmation','confirmed') NULL"],
+      ["confirmedat", "`confirmedAt` timestamp NULL"],
+      ["confirmedby", "`confirmedBy` int NULL"],
+    ];
+    for (const [name, definition] of itemColumns) {
+      if (!columns.has(`inventoryitems.${name}`)) {
+        steps.push({ description: `Adicionar coluna inventoryItems.${definition.split("`")[1]}`, sql: `ALTER TABLE \`inventoryItems\` ADD COLUMN ${definition}` });
+      }
+    }
+    if (!indexes.has("inventoryitems.item_cycle_source_unique")) {
+      steps.push({
+        description: "Criar índice único item_cycle_source_unique (impede importar a mesma origem duas vezes)",
+        sql: "CREATE UNIQUE INDEX `item_cycle_source_unique` ON `inventoryItems` (`cycleId`, `sourceItemId`)",
+      });
+    }
+    if (!indexes.has("inventoryitems.item_cycle_import_status_idx")) {
+      steps.push({
+        description: "Criar índice item_cycle_import_status_idx",
+        sql: "CREATE INDEX `item_cycle_import_status_idx` ON `inventoryItems` (`cycleId`, `importStatus`)",
+      });
+    }
   }
   if (!tables.has("historicalinventoryloads")) {
     steps.push({ description: "Criar tabela historicalInventoryLoads", sql: CREATE_HISTORICAL_LOADS });
