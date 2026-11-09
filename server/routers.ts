@@ -963,14 +963,14 @@ export const appRouter = router({
       if (!result.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
       return { success: true, location: result.location };
     }),
-    archiveStats: staffProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
+    archiveStats: staffProcedure.input(z.object({ year: yearInput, type: cycleTypeInput })).query(async ({ input }) => {
       const db = await requireDb();
       // Traz todos os ciclos validados do ano com seus dados de arquivamento e escola
       const rows = await db
         .select({ cycle: inventoryCycles, school: schools })
         .from(inventoryCycles)
         .innerJoin(schools, eq(inventoryCycles.schoolId, schools.id))
-        .where(and(eq(inventoryCycles.year, input.year), eq(inventoryCycles.status, "validated")));
+        .where(and(eq(inventoryCycles.year, input.year), eq(inventoryCycles.type, input.type), eq(inventoryCycles.status, "validated")));
 
       const counts = { ACTIVE: 0, PENDING: 0, ARCHIVED: 0, ERROR: 0 };
       for (const row of rows) counts[row.cycle.archiveStatus as keyof typeof counts]++;

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import type { CycleType } from "@shared/inventoryCycle";
 import {
   Archive,
   AlertCircle,
@@ -69,8 +70,8 @@ const archiveStatusConfig = {
 
 // ── componente ────────────────────────────────────────────────────────────────
 
-export function ArchiveStatusPanel({ year }: { year: number }) {
-  const statsQuery = trpc.management.archiveStats.useQuery({ year });
+export function ArchiveStatusPanel({ year, type = "pre_inventory" }: { year: number; type?: CycleType }) {
+  const statsQuery = trpc.management.archiveStats.useQuery({ year, type });
   const stats = statsQuery.data as ArchiveStats | undefined;
 
   const retryMutation = trpc.management.retryArchive.useMutation({

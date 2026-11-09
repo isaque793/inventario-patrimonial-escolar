@@ -142,7 +142,7 @@ export default function ManagementExcel() {
   const { metrics } = dashboard;
 
   const exportPending = () => {
-    if (!exportPendingIssuesTemplate({ rows: pendingExportRows, fileName: `registro-pendencias-${year}` })) {
+    if (!exportPendingIssuesTemplate({ rows: pendingExportRows, fileName: `registro-pendencias-${year}${cycleType === "official" ? "-inventario" : "-pre-inventario"}` })) {
       toast.info("Não existem pendências com estes filtros.");
     }
   };
@@ -405,7 +405,7 @@ export default function ManagementExcel() {
         </Card>
       </div>
 
-      <ArchiveStatusPanel year={year} />
+      <ArchiveStatusPanel year={year} type={cycleType} />
     </div>
   );
 }

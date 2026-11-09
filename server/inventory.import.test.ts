@@ -5,7 +5,7 @@ import { inventoryCycles, inventoryItems } from "../drizzle/schema";
 type Row = Record<string, unknown>;
 
 const mocks = vi.hoisted(() => {
-  const state = { cycles: [] as Row[], itemQueue: [] as Row[][], inserted: [] as Row[][], updated: [] as Row[], access: true, cycleById: null as Row | null };
+  const state = { cycles: [] as Row[], itemQueue: [] as Row[][], inserted: [] as Row[][], updated: [] as Row[], access: true, affectedRows: 1, cycleById: null as Row | null };
   return { state };
 });
 
@@ -20,7 +20,7 @@ function makeDb() {
     },
   });
   const insert = () => ({ values: async (values: Row | Row[]) => { mocks.state.inserted.push(Array.isArray(values) ? values : [values]); return [{ insertId: 1 }]; } });
-  const update = () => ({ set: (values: Row) => ({ where: async () => { mocks.state.updated.push(values); } }) });
+  const update = () => ({ set: (values: Row) => ({ where: async () => { mocks.state.updated.push(values); return [{ affectedRows: mocks.state.affectedRows }]; } }) });
   const db: any = { select, insert, update };
   db.transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(db);
   return db;
@@ -68,6 +68,7 @@ beforeEach(() => {
   mocks.state.inserted = [];
   mocks.state.updated = [];
   mocks.state.access = true;
+  mocks.state.affectedRows = 1;
   mocks.state.cycleById = official();
 });
 
@@ -144,6 +145,12 @@ describe("inventory.confirmImportedItem", () => {
     expect(result).toMatchObject({ id: 20, importStatus: "confirmed" });
     expect(mocks.state.updated[0]).toMatchObject({ importStatus: "confirmed", confirmedBy: 11 });
     expect(mocks.state.updated[0].confirmedAt).toBeInstanceOf(Date);
+    expect(mocks.state.inserted).toEqual([]);
+  });
+
+  it("duas conferências ao mesmo tempo: a segunda recebe conflito e nenhuma pendência é criada", async () => {
+    mocks.state.affectedRows = 0;
+    await expect(appRouter.createCaller(userContext()).inventory.confirmImportedItem({ ...confirmInput, pending: { issueType: "other", pendingDescription: "Verificar" } })).rejects.toMatchObject({ code: "CONFLICT" });
     expect(mocks.state.inserted).toEqual([]);
   });
 
