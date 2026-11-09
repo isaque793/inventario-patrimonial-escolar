@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import Validation from "./pages/Validation";
 
 function HomeRoute() { const { user } = useAuth(); return user?.role === "manager" ? <Redirect to="/gestao" /> : <Home />; }
+function OfficialInventoryRoute() { const { user } = useAuth(); return user?.role === "manager" ? <Redirect to="/gestao" /> : <Home />; }
 function ManagementRoute() { return <AdminGuard allowManager><Management /></AdminGuard>; }
 function ValidationRoute() { return <AdminGuard allowManager><Validation /></AdminGuard>; }
 function ManagementReviewRoute() { return <AdminGuard allowManager><ManagementReview /></AdminGuard>; }
@@ -34,6 +35,7 @@ function Router() {
         <DashboardLayout>
           <Switch>
             <Route path="/" component={HomeRoute} />
+            <Route path="/inventario" component={OfficialInventoryRoute} />
             <Route path="/gestao" component={ManagementRoute} />
             <Route path="/validacao" component={ValidationRoute} />
             <Route path="/gestao/analise/:cycleId" component={ManagementReviewRoute} />

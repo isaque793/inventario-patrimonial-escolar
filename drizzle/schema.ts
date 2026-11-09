@@ -111,6 +111,8 @@ export const inventoryCycles = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     schoolId: int("schoolId").notNull(),
     year: int("year").notNull(),
+    // Processo a que o ciclo pertence. Os ciclos que já existiam são pré-inventário.
+    type: mysqlEnum("type", ["pre_inventory", "official"]).default("pre_inventory").notNull(),
     status: mysqlEnum("status", ["draft", "submitted", "under_review", "returned", "validated"])
       .default("draft")
       .notNull(),
@@ -128,7 +130,7 @@ export const inventoryCycles = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => ({
-    schoolYearUnique: uniqueIndex("cycle_school_year_unique").on(table.schoolId, table.year),
+    schoolYearTypeUnique: uniqueIndex("cycle_school_year_type_unique").on(table.schoolId, table.year, table.type),
     schoolIdx: index("cycle_school_idx").on(table.schoolId),
     statusIdx: index("cycle_status_idx").on(table.status),
     archiveStatusIdx: index("cycle_archive_status_idx").on(table.archiveStatus),
@@ -164,12 +166,21 @@ export const inventoryItems = mysqlTable(
     unitValue: decimal("unitValue", { precision: 14, scale: 2 }).notNull(),
     totalValue: decimal("totalValue", { precision: 14, scale: 2 }).notNull(),
     currentSituation: varchar("currentSituation", { length: 160 }).notNull(),
+    // Origem e conferência de bens copiados do pré-inventário (nulos nos demais bens).
+    sourceCycleId: int("sourceCycleId"),
+    sourceItemId: int("sourceItemId"),
+    importStatus: mysqlEnum("importStatus", ["pending_confirmation", "confirmed"]),
+    confirmedAt: timestamp("confirmedAt"),
+    confirmedBy: int("confirmedBy"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => ({
     cycleIdx: index("item_cycle_idx").on(table.cycleId),
     expenseIdx: index("item_expense_idx").on(table.expenseCode),
+    // A mesma origem não pode ser copiada duas vezes para o mesmo ciclo (NULLs não conflitam).
+    cycleSourceUnique: uniqueIndex("item_cycle_source_unique").on(table.cycleId, table.sourceItemId),
+    cycleImportStatusIdx: index("item_cycle_import_status_idx").on(table.cycleId, table.importStatus),
   }),
 );
 

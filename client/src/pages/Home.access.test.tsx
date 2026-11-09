@@ -24,6 +24,7 @@ vi.mock("@/lib/trpc", () => ({
     catalog: { expenseCategories: { useQuery: () => ({ data: [] }) } },
     inventory: {
       lookupHistorical: { useQuery: () => ({ data: undefined, isFetching: false, isError: false }) },
+      findImportedItem: { useQuery: () => ({ data: null, isFetching: false, isError: false }) }, confirmImportedItem: { useMutation: () => mutation }, importPreview: { useQuery: () => ({ data: undefined, isLoading: false, isError: false }) }, importPreInventory: { useMutation: () => mutation },
       overview: { useQuery: (...args: unknown[]) => { (mocks.overviewQuery as unknown as (...queryArgs: unknown[]) => void)(...args); return { data: overview, isLoading: false, refetch: vi.fn() }; } }, createCycle: { useMutation: () => mutation }, setCommittee: { useMutation: () => mutation }, addItem: { useMutation: () => mutation }, updateItem: { useMutation: () => mutation }, deleteItem: { useMutation: () => mutation }, addIssue: { useMutation: () => mutation }, deleteIssue: { useMutation: () => mutation }, upsertNotes: { useMutation: () => mutation }, uploadDocument: { useMutation: () => mutation }, removeDocument: { useMutation: () => mutation }, submit: { useMutation: () => mutation },
     },
   },
@@ -46,7 +47,7 @@ describe("início sem vínculo escolar", () => {
     role = "admin";
     schools = [{ id: 12, name: "Escola Administrativa", schoolCode: "31234567", city: "Belo Horizonte" }];
     render(<Home />);
-    expect(screen.getByRole("heading", { name: "Escolas e inventários" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Escolas · Pré-inventário" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("Escola Administrativa").length).toBeGreaterThan(0));
     await waitFor(() => expect(mocks.overviewQuery).toHaveBeenLastCalledWith(expect.objectContaining({ schoolId: 12 }), expect.objectContaining({ enabled: true })));
   });

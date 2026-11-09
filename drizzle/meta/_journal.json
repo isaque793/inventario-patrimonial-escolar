@@ -78,6 +78,13 @@
       "when": 1791446400000,
       "tag": "0010_manager_role",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1791532800000,
+      "tag": "0011_separate_pre_inventory_and_official",
+      "breakpoints": true
     }
   ]
 }
