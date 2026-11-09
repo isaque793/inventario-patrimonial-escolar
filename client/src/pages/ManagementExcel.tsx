@@ -76,12 +76,13 @@ function Metric({
 
 export default function ManagementExcel() {
   const [year, setYear] = useState(CURRENT_YEAR);
+  const [cycleType, setCycleType] = useState<"pre_inventory" | "official">("pre_inventory");
   const [issueStatus, setIssueStatus] = useState("all");
   const [schoolFilter, setSchoolFilter] = useState("all");
   const [exportSchoolId, setExportSchoolId] = useState("all");
   const [progressView, setProgressView] = useState<"started" | "notStarted">("started");
 
-  const dashboardQuery = trpc.management.dashboard.useQuery({ year });
+  const dashboardQuery = trpc.management.dashboard.useQuery({ year, type: cycleType });
   const utils = trpc.useUtils();
   const [exporting, setExporting] = useState(false);
   const categoriesQuery = trpc.catalog.expenseCategories.useQuery();
@@ -154,7 +155,7 @@ export default function ManagementExcel() {
       const records: any[] = [];
       for (let start = 0; start < schoolIds.length; start += EXPORT_BATCH_SIZE) {
         const batch = await utils.management.controlExport.fetch(
-          { year, schoolIds: schoolIds.slice(start, start + EXPORT_BATCH_SIZE) },
+          { year, type: cycleType, schoolIds: schoolIds.slice(start, start + EXPORT_BATCH_SIZE) },
           { staleTime: 0, retry: false },
         );
         records.push(...batch.filter((record: any) => record.items.length > 0 || record.issues.length > 0));
@@ -184,7 +185,7 @@ export default function ManagementExcel() {
             Acompanhe as escolas, valide inventários e exporte os consolidados em planilhas Excel.
           </p>
         </div>
-        <Select value={String(year)} onValueChange={value => setYear(Number(value))}>
+        <div className="flex gap-2"><Select value={cycleType} onValueChange={value => setCycleType(value as "pre_inventory" | "official")}><SelectTrigger className="w-[170px] bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pre_inventory">Pré-inventário</SelectItem><SelectItem value="official">Inventário oficial</SelectItem></SelectContent></Select><Select value={String(year)} onValueChange={value => setYear(Number(value))}>
           <SelectTrigger className="w-[112px] bg-white">
             <SelectValue />
           </SelectTrigger>
@@ -195,7 +196,7 @@ export default function ManagementExcel() {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select></div>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
