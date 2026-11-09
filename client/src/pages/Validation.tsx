@@ -23,17 +23,18 @@ const normalize = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, 
 
 export default function Validation() {
   const [year, setYear] = useState(CURRENT_YEAR);
+  const [cycleType, setCycleType] = useState<"pre_inventory" | "official">("pre_inventory");
   const [search, setSearch] = useState("");
   const [, setLocation] = useLocation();
 
-  const dashboardQuery = trpc.management.dashboard.useQuery({ year });
+  const dashboardQuery = trpc.management.dashboard.useQuery({ year, type: cycleType });
   const cycles: any[] = dashboardQuery.data?.cycles ?? [];
 
   const filtered = useMemo(() => {
     const term = normalize(search.trim());
     if (!term) return cycles;
     return cycles.filter(entry =>
-      normalize([entry.school?.name, entry.school?.city, entry.school?.schoolCode, cycleStatusLabels[entry.cycle.status]].filter(Boolean).join(" ")).includes(term),
+      normalize([entry.school?.name, entry.school?.city, entry.school?.schoolCode, cycleStatusLabels[entry.cycle.status], entry.cycle.type === "official" ? "inventário oficial" : "pré-inventário"].filter(Boolean).join(" ")).includes(term),
     );
   }, [cycles, search]);
 
@@ -47,7 +48,7 @@ export default function Validation() {
             Localize uma escola e abra a revisão para conferir documentos, inventário e pendências.
           </p>
         </div>
-        <Select value={String(year)} onValueChange={value => setYear(Number(value))}>
+        <div className="flex gap-2"><Select value={cycleType} onValueChange={value => setCycleType(value as "pre_inventory" | "official")}><SelectTrigger className="w-[170px] bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pre_inventory">Pré-inventário</SelectItem><SelectItem value="official">Inventário oficial</SelectItem></SelectContent></Select><Select value={String(year)} onValueChange={value => setYear(Number(value))}>
           <SelectTrigger className="w-[112px] bg-white">
             <SelectValue />
           </SelectTrigger>
@@ -58,7 +59,7 @@ export default function Validation() {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select></div>
       </header>
 
       <Card className="border-[#dce7dc]">
@@ -101,6 +102,7 @@ export default function Validation() {
                 <thead className="border-b border-[#e4ece5] bg-[#f7faf6] text-[10px] font-bold uppercase tracking-[.1em] text-[#6c7e72]">
                   <tr>
                     <th className="px-5 py-3 text-left">Escola</th>
+                    <th className="px-4 py-3 text-left">Modalidade</th>
                     <th className="px-4 py-3 text-left">Situação</th>
                     <th className="px-4 py-3 text-right">Submissão</th>
                     <th className="px-5 py-3 text-right">Ação</th>
@@ -113,6 +115,7 @@ export default function Validation() {
                         <p className="font-semibold text-[#234136]">{entry.school.name}</p>
                         <p className="text-xs text-[#75867a]">{entry.school.city || "Sem município"}</p>
                       </td>
+                      <td className="px-4 py-4"><Badge variant="outline">{entry.cycle.type === "official" ? "Inventário oficial" : "Pré-inventário"}</Badge></td>
                       <td className="px-4 py-4">
                         <Badge className="border-0 bg-[#e8f1e8] text-[#286149]">{cycleStatusLabels[entry.cycle.status]}</Badge>
                       </td>
@@ -128,7 +131,7 @@ export default function Validation() {
                   ))}
                   {!filtered.length && (
                     <tr>
-                      <td colSpan={4} className="px-5 py-10 text-center text-sm text-[#718277]">
+                      <td colSpan={5} className="px-5 py-10 text-center text-sm text-[#718277]">
                         {cycles.length ? "Nenhuma escola encontrada para esta pesquisa." : "Não há escolas com ciclo neste ano."}
                       </td>
                     </tr>
