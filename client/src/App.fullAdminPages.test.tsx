@@ -26,7 +26,7 @@ import App from "./App";
 
 afterEach(() => { cleanup(); window.history.pushState({}, "", "/"); });
 describe("aplicação com administrador", () => {
-  for (const [path, heading] of [["/", "Escolas e inventários"], ["/gestao", "Gestão e consolidação"], ["/administradores", "Administradores da plataforma"]] as const) {
+  for (const [path, heading] of [["/", "Escolas · Pré-inventário"], ["/gestao", "Gestão e consolidação"], ["/administradores", "Administradores da plataforma"]] as const) {
     it(`carrega a página real ${path}`, () => {
       window.history.pushState({}, "", path);
       render(<App />);

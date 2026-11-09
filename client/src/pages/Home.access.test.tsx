@@ -46,7 +46,7 @@ describe("início sem vínculo escolar", () => {
     role = "admin";
     schools = [{ id: 12, name: "Escola Administrativa", schoolCode: "31234567", city: "Belo Horizonte" }];
     render(<Home />);
-    expect(screen.getByRole("heading", { name: "Escolas e inventários" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Escolas · Pré-inventário" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("Escola Administrativa").length).toBeGreaterThan(0));
     await waitFor(() => expect(mocks.overviewQuery).toHaveBeenLastCalledWith(expect.objectContaining({ schoolId: 12 }), expect.objectContaining({ enabled: true })));
   });
