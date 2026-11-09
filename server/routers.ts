@@ -536,8 +536,8 @@ export const appRouter = router({
           if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
           // O bem tem de ser deste ciclo oficial e ter vindo do pré-inventário.
           if (current.cycleId !== cycle.id || current.importStatus == null) throw accessDenied();
-          if (current.importStatus === "confirmed") {
-            throw new TRPCError({ code: "CONFLICT", message: "Este bem já foi conferido." });
+          if (current.importStatus !== "pending_confirmation") {
+            throw new TRPCError({ code: "CONFLICT", message: "Este bem já foi conferido ou não está aguardando conferência." });
           }
           if (fields.propertyNumber !== NO_PROPERTY_NUMBER) {
             const duplicate = await tx
@@ -550,10 +550,13 @@ export const appRouter = router({
             }
           }
           // Atualiza o próprio registro importado (não cria um segundo bem). O estado verde só existe depois deste gravar.
-          await tx
+          const updateResult = await tx
             .update(inventoryItems)
             .set({ ...fields, quantity, unitValue: unitValue.toFixed(2), totalValue, importStatus: "confirmed", confirmedAt: new Date(), confirmedBy: ctx.user.id })
             .where(and(eq(inventoryItems.id, itemId), eq(inventoryItems.importStatus, "pending_confirmation")));
+          if (Number(updateResult[0].affectedRows) !== 1) {
+            throw new TRPCError({ code: "CONFLICT", message: "Este bem já foi confirmado por outra operação. Atualize a tela para consultar os dados." });
+          }
           if (pending) {
             await tx.insert(inventoryIssues).values({
               cycleId: cycle.id,
@@ -867,7 +870,7 @@ export const appRouter = router({
         setSchoolAccessSuspended(input.suspended);
         return { suspended: isSchoolAccessSuspended() };
       }),
-    controlExport: staffProcedure.input(z.object({ year: yearInput, schoolIds: z.array(z.number().int().positive()).max(50).optional() })).query(({ input }) => getManagementControlExportData(input.year, input.schoolIds)),
+    controlExport: staffProcedure.input(z.object({ year: yearInput, type: cycleTypeInput, schoolIds: z.array(z.number().int().positive()).max(50).optional() })).query(({ input }) => getManagementControlExportData(input.year, input.schoolIds, input.type)),
     reviewInventory: staffProcedure.input(z.object({ cycleId: z.number().int().positive() })).query(async ({ input }) => {
       const cycle = await getCycleById(input.cycleId);
       if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
@@ -889,8 +892,8 @@ export const appRouter = router({
         await db.update(users).set({ role: input.role }).where(eq(users.id, input.userId));
         return { success: true, role: input.role };
       }),
-    dashboard: staffProcedure.input(z.object({ year: yearInput })).query(async ({ input }) => {
-      const [cycles, itemRows, issueRows, schoolsWithMembers] = await Promise.all([getManagementCycles(input.year), getManagementItemTotals(input.year), getManagementIssues(input.year), getSchoolsWithMembers()]);
+    dashboard: staffProcedure.input(z.object({ year: yearInput, type: cycleTypeInput })).query(async ({ input }) => {
+      const [cycles, itemRows, issueRows, schoolsWithMembers] = await Promise.all([getManagementCycles(input.year, input.type), getManagementItemTotals(input.year, input.type), getManagementIssues(input.year, input.type), getSchoolsWithMembers()]);
       const itemCountBySchool = new Map<number, number>();
       for (const row of itemRows) itemCountBySchool.set(row.schoolId, (itemCountBySchool.get(row.schoolId) ?? 0) + row.itemCount);
       const schoolProgress = schoolsWithMembers.map(entry => ({ ...entry, itemCount: itemCountBySchool.get(entry.school.id) ?? 0 }));
