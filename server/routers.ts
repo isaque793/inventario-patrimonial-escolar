@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import {
   committeeMembers,
@@ -18,6 +18,7 @@ import {
 import {
   findHistoricalItem,
   findSchoolMember,
+  historicalPropertyNumberCandidates,
   getCycleById,
   getManagementCycles,
   getSchoolsWithMembers,
@@ -64,6 +65,7 @@ import {
 } from "./inventoryUtils";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { CYCLE_TYPES, DEFAULT_CYCLE_TYPE } from "@shared/inventoryCycle";
+import { describeImportResult, planPreInventoryImport, summarizeImportPlan, NO_PROPERTY_NUMBER } from "./preInventoryImport";
 import { createUserWithPassword, verifyUserPassword } from "./db";
 
 
@@ -89,6 +91,43 @@ async function assertEditableCycle(user: NonNullable<Parameters<typeof getVisibl
     throw new TRPCError({ code: "BAD_REQUEST", message: "Este inventário já foi submetido para validação e não pode ser alterado." });
   }
   return cycle;
+}
+
+/** Ciclo oficial editável da escola autorizada (importação e conferência só existem no oficial). */
+async function assertEditableOfficialCycle(user: NonNullable<Parameters<typeof getVisibleSchools>[0]>, cycleId: number) {
+  const cycle = await assertEditableCycle(user, cycleId);
+  if (cycle.type !== "official") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Esta operação só é permitida no inventário oficial." });
+  }
+  return cycle;
+}
+
+type DbClient = Awaited<ReturnType<typeof requireDb>>;
+
+/** Lê, no mesmo contexto (ou transação), os ciclos e bens envolvidos na importação. */
+async function loadImportContext(db: Pick<DbClient, "select">, schoolId: number, year: number) {
+  const cycles = await db
+    .select()
+    .from(inventoryCycles)
+    .where(and(eq(inventoryCycles.schoolId, schoolId), eq(inventoryCycles.year, year), inArray(inventoryCycles.type, ["pre_inventory", "official"])));
+  const pre = cycles.find(cycle => cycle.type === "pre_inventory");
+  const official = cycles.find(cycle => cycle.type === "official");
+  if (!official) throw new TRPCError({ code: "NOT_FOUND", message: "Inicie o inventário oficial antes de importar bens do pré-inventário." });
+  if (!pre) throw new TRPCError({ code: "NOT_FOUND", message: `Esta escola não tem pré-inventário de ${year} para importar.` });
+  // Origem e destino têm de ser da mesma escola e dos tipos certos (nunca confiar só nos IDs do cliente).
+  if (pre.schoolId !== official.schoolId || pre.schoolId !== schoolId) throw accessDenied();
+  const [sourceItems, officialItems] = await Promise.all([
+    db.select().from(inventoryItems).where(eq(inventoryItems.cycleId, pre.id)).orderBy(asc(inventoryItems.id)),
+    db.select().from(inventoryItems).where(eq(inventoryItems.cycleId, official.id)),
+  ]);
+  const importedSourceItemIds = officialItems.flatMap(item => (item.sourceItemId != null ? [item.sourceItemId] : []));
+  const officialPropertyNumbers = officialItems.map(item => item.propertyNumber);
+  return { pre, official, sourceItems, importedSourceItemIds, officialPropertyNumbers };
+}
+
+function isDuplicateEntryError(error: unknown) {
+  const text = [error, (error as { cause?: unknown })?.cause].map(part => (part instanceof Error ? part.message : String(part ?? ""))).join(" ");
+  return text.includes("ER_DUP_ENTRY") || text.includes("item_cycle_source_unique") || text.includes("Duplicate entry");
 }
 
 function csvText(value: string | null | undefined) {
@@ -352,6 +391,190 @@ export const appRouter = router({
         const result = await db.insert(inventoryCycles).values(input);
         const cycle = await db.select().from(inventoryCycles).where(eq(inventoryCycles.id, Number(result[0].insertId))).limit(1);
         return cycle[0];
+      }),
+    importPreview: protectedProcedure
+      .input(z.object({ schoolId: z.number().int().positive(), year: yearInput }))
+      .query(async ({ ctx, input }) => {
+        await assertSchoolAccess(ctx.user, input.schoolId);
+        const db = await requireDb();
+        const context = await loadImportContext(db, input.schoolId, input.year);
+        const plan = planPreInventoryImport({ sourceItems: context.sourceItems, importedSourceItemIds: context.importedSourceItemIds, officialPropertyNumbers: context.officialPropertyNumbers });
+        const state = new Map<number, "new" | "already_imported" | "already_in_official" | "duplicated_in_source">();
+        for (const entry of plan.toImport) state.set(entry.id, "new");
+        for (const entry of plan.alreadyImported) state.set(entry.id, "already_imported");
+        for (const entry of plan.alreadyInOfficial) state.set(entry.id, "already_in_official");
+        for (const entry of plan.duplicatedInSource) state.set(entry.id, "duplicated_in_source");
+        return {
+          sourceYear: context.pre.year,
+          officialCycleId: context.official.id,
+          summary: summarizeImportPlan(plan),
+          items: context.sourceItems.map(item => ({
+            id: item.id,
+            propertyNumber: item.propertyNumber,
+            description: item.description,
+            quantity: item.quantity,
+            totalValue: item.totalValue,
+            state: state.get(item.id) ?? "new",
+          })),
+        };
+      }),
+    importPreInventory: protectedProcedure
+      .input(z.object({ schoolId: z.number().int().positive(), year: yearInput, sourceItemIds: z.array(z.number().int().positive()).min(1).max(5000).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await assertSchoolAccess(ctx.user, input.schoolId);
+        const db = await requireDb();
+        try {
+          return await db.transaction(async tx => {
+            const context = await loadImportContext(tx, input.schoolId, input.year);
+            // Só importa enquanto o ciclo oficial é editável (rascunho ou devolvido).
+            await assertEditableOfficialCycle(ctx.user, context.official.id);
+            let candidates = context.sourceItems;
+            if (input.sourceItemIds) {
+              const wanted = new Set(input.sourceItemIds);
+              candidates = context.sourceItems.filter(item => wanted.has(item.id));
+              if (candidates.length !== wanted.size) {
+                throw new TRPCError({ code: "BAD_REQUEST", message: "Alguns bens selecionados não pertencem ao pré-inventário desta escola." });
+              }
+            }
+            const plan = planPreInventoryImport({ sourceItems: candidates, importedSourceItemIds: context.importedSourceItemIds, officialPropertyNumbers: context.officialPropertyNumbers });
+            if (plan.toImport.length) {
+              // O bem de origem é apenas lido: a cópia guarda de onde veio e nasce "aguardando conferência".
+              await tx.insert(inventoryItems).values(
+                plan.toImport.map(item => ({
+                  cycleId: context.official.id,
+                  propertyNumber: item.propertyNumber,
+                  quantity: item.quantity,
+                  description: item.description,
+                  technicalDetails: item.technicalDetails,
+                  expenseCode: item.expenseCode,
+                  conservationCode: item.conservationCode,
+                  conservationState: item.conservationState,
+                  unitValue: item.unitValue,
+                  totalValue: item.totalValue,
+                  currentSituation: item.currentSituation,
+                  sourceCycleId: context.pre.id,
+                  sourceItemId: item.id,
+                  importStatus: "pending_confirmation" as const,
+                })),
+              );
+            }
+            const summary = summarizeImportPlan(plan);
+            return { ...summary, imported: summary.toImport, message: describeImportResult(summary) };
+          });
+        } catch (error) {
+          // Duas importações ao mesmo tempo: a chave única impede a cópia dupla e a transação desfaz tudo.
+          if (isDuplicateEntryError(error)) {
+            throw new TRPCError({ code: "CONFLICT", message: "Outra importação estava em andamento. Nada foi duplicado; tente novamente." });
+          }
+          throw error;
+        }
+      }),
+    listImportedItems: protectedProcedure
+      .input(z.object({ cycleId: z.number().int().positive(), status: z.enum(["pending_confirmation", "confirmed"]).optional() }))
+      .query(async ({ ctx, input }) => {
+        const cycle = await getCycleById(input.cycleId);
+        if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
+        await assertSchoolAccess(ctx.user, cycle.schoolId);
+        const db = await requireDb();
+        const rows = await db
+          .select()
+          .from(inventoryItems)
+          .where(and(eq(inventoryItems.cycleId, cycle.id), isNotNull(inventoryItems.importStatus)))
+          .orderBy(asc(inventoryItems.id));
+        const items = input.status ? rows.filter(row => row.importStatus === input.status) : rows;
+        return {
+          pending: rows.filter(row => row.importStatus === "pending_confirmation").length,
+          confirmed: rows.filter(row => row.importStatus === "confirmed").length,
+          items,
+        };
+      }),
+    findImportedItem: protectedProcedure
+      .input(z.object({ cycleId: z.number().int().positive(), propertyNumber: z.string().trim().min(1).max(80) }))
+      .query(async ({ ctx, input }) => {
+        const cycle = await getCycleById(input.cycleId);
+        if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
+        await assertSchoolAccess(ctx.user, cycle.schoolId);
+        if (cycle.type !== "official") return null;
+        const db = await requireDb();
+        // Só procura neste ciclo oficial (e, portanto, só nesta escola): nunca em outro ciclo.
+        const rows = await db
+          .select()
+          .from(inventoryItems)
+          .where(and(eq(inventoryItems.cycleId, cycle.id), isNotNull(inventoryItems.importStatus), inArray(inventoryItems.propertyNumber, historicalPropertyNumberCandidates(input.propertyNumber))))
+          .orderBy(asc(inventoryItems.id));
+        // Prefere o ainda não conferido; se só houver conferido, devolve-o para avisar que já foi conferido.
+        return rows.find(row => row.importStatus === "pending_confirmation") ?? rows[0] ?? null;
+      }),
+    confirmImportedItem: protectedProcedure
+      .input(
+        z.object({
+          cycleId: z.number().int().positive(),
+          itemId: z.number().int().positive(),
+          propertyNumber: z.string().trim().min(1).max(80),
+          quantity: z.number().int().min(1).max(1000000),
+          description: z.string().trim().min(2).max(4000),
+          technicalDetails: z.string().trim().max(4000).optional().nullable(),
+          expenseCode: z.string().trim().regex(/^52\.(0[1-9]|1[0-9]|2[0-2]|25|26|99)$/),
+          conservationCode: z.string().trim().max(32).optional().nullable(),
+          conservationState: z.string().trim().min(2).max(80),
+          unitValue: z.number().min(0).max(999999999),
+          currentSituation: z.string().trim().min(2).max(160),
+          pending: z.object({
+            issueType: z.enum(["not_found", "outside_register", "new_equipment", "transfer", "donation", "guard_term", "other"]),
+            pendingDescription: z.string().trim().min(2).max(4000),
+            sei: z.string().trim().max(120).optional().nullable(),
+          }).optional().nullable(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const cycle = await assertEditableOfficialCycle(ctx.user, input.cycleId);
+        const db = await requireDb();
+        const { itemId, cycleId, unitValue, quantity, pending, ...fields } = input;
+        const totalValue = calculateLineTotal(quantity, unitValue);
+        return db.transaction(async tx => {
+          const current = (await tx.select().from(inventoryItems).where(eq(inventoryItems.id, itemId)).limit(1))[0];
+          if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+          // O bem tem de ser deste ciclo oficial e ter vindo do pré-inventário.
+          if (current.cycleId !== cycle.id || current.importStatus == null) throw accessDenied();
+          if (current.importStatus === "confirmed") {
+            throw new TRPCError({ code: "CONFLICT", message: "Este bem já foi conferido." });
+          }
+          if (fields.propertyNumber !== NO_PROPERTY_NUMBER) {
+            const duplicate = await tx
+              .select({ id: inventoryItems.id })
+              .from(inventoryItems)
+              .where(and(eq(inventoryItems.cycleId, cycle.id), eq(inventoryItems.propertyNumber, fields.propertyNumber)))
+              .limit(2);
+            if (duplicate.some(entry => entry.id !== itemId)) {
+              throw new TRPCError({ code: "CONFLICT", message: `Já existe um patrimônio com o número "${fields.propertyNumber}" neste inventário.` });
+            }
+          }
+          // Atualiza o próprio registro importado (não cria um segundo bem). O estado verde só existe depois deste gravar.
+          await tx
+            .update(inventoryItems)
+            .set({ ...fields, quantity, unitValue: unitValue.toFixed(2), totalValue, importStatus: "confirmed", confirmedAt: new Date(), confirmedBy: ctx.user.id })
+            .where(and(eq(inventoryItems.id, itemId), eq(inventoryItems.importStatus, "pending_confirmation")));
+          if (pending) {
+            await tx.insert(inventoryIssues).values({
+              cycleId: cycle.id,
+              itemId,
+              issueType: pending.issueType,
+              propertyNumber: fields.propertyNumber,
+              quantity,
+              description: fields.description,
+              conservationState: fields.conservationState,
+              location: null,
+              totalValue,
+              originBody: null,
+              currentSituation: fields.currentSituation,
+              pendingDescription: pending.pendingDescription,
+              sei: pending.sei ?? null,
+              measuresTaken: null,
+              resolutionStatus: "open",
+            });
+          }
+          return { id: itemId, totalValue, importStatus: "confirmed" as const };
+        });
       }),
     setCommittee: protectedProcedure
       .input(
