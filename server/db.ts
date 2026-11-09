@@ -324,13 +324,13 @@ export async function getSchoolOverview(schoolId: number, year: number, type: Cy
   return { school, cycle, members, items, issues, documents, notes: notes[0] ?? null, history };
 }
 
-export async function getManagementCycles(year: number) {
+export async function getManagementCycles(year: number, type: CycleType = DEFAULT_CYCLE_TYPE) {
   const db = await requireDb();
   return db
     .select({ cycle: inventoryCycles, school: schools })
     .from(inventoryCycles)
     .innerJoin(schools, eq(inventoryCycles.schoolId, schools.id))
-    .where(eq(inventoryCycles.year, year))
+    .where(and(eq(inventoryCycles.year, year), eq(inventoryCycles.type, type)))
     .orderBy(asc(schools.name));
 }
 
@@ -347,18 +347,18 @@ export async function getSchoolsWithMembers() {
   return schoolRows.map(school => ({ school, members: memberRows.filter(member => member.schoolId === school.id) }));
 }
 
-export async function getManagementItems(year: number) {
+export async function getManagementItems(year: number, type: CycleType = DEFAULT_CYCLE_TYPE) {
   const db = await requireDb();
   return db
     .select({ item: inventoryItems, school: schools, cycle: inventoryCycles })
     .from(inventoryItems)
     .innerJoin(inventoryCycles, eq(inventoryItems.cycleId, inventoryCycles.id))
     .innerJoin(schools, eq(inventoryCycles.schoolId, schools.id))
-    .where(eq(inventoryCycles.year, year));
+    .where(and(eq(inventoryCycles.year, year), eq(inventoryCycles.type, type)));
 }
 
 /** Totais por escola e código de despesa, calculados no banco: o painel não precisa dos itens em si. */
-export async function getManagementItemTotals(year: number) {
+export async function getManagementItemTotals(year: number, type: CycleType = DEFAULT_CYCLE_TYPE) {
   const db = await requireDb();
   const rows = await db
     .select({
@@ -370,27 +370,27 @@ export async function getManagementItemTotals(year: number) {
     })
     .from(inventoryItems)
     .innerJoin(inventoryCycles, eq(inventoryItems.cycleId, inventoryCycles.id))
-    .where(eq(inventoryCycles.year, year))
+    .where(and(eq(inventoryCycles.year, year), eq(inventoryCycles.type, type)))
     .groupBy(inventoryCycles.schoolId, inventoryItems.expenseCode);
   return rows.map(row => ({ ...row, itemCount: Number(row.itemCount), quantity: Number(row.quantity), totalValue: Number(row.totalValue) }));
 }
 
-export async function getManagementIssues(year: number) {
+export async function getManagementIssues(year: number, type: CycleType = DEFAULT_CYCLE_TYPE) {
   const db = await requireDb();
   return db
     .select({ issue: inventoryIssues, school: schools, cycle: inventoryCycles })
     .from(inventoryIssues)
     .innerJoin(inventoryCycles, eq(inventoryIssues.cycleId, inventoryCycles.id))
     .innerJoin(schools, eq(inventoryCycles.schoolId, schools.id))
-    .where(eq(inventoryCycles.year, year));
+    .where(and(eq(inventoryCycles.year, year), eq(inventoryCycles.type, type)));
 }
 
-export async function getManagementControlExportData(year: number, schoolIds?: number[]) {
+export async function getManagementControlExportData(year: number, schoolIds?: number[], type: CycleType = DEFAULT_CYCLE_TYPE) {
   const db = await requireDb();
   if (schoolIds && !schoolIds.length) return [];
   const [schoolRows, cycleRows] = await Promise.all([
     schoolIds ? db.select().from(schools).where(inArray(schools.id, schoolIds)).orderBy(asc(schools.name)) : db.select().from(schools).orderBy(asc(schools.name)),
-    db.select().from(inventoryCycles).where(schoolIds ? and(eq(inventoryCycles.year, year), inArray(inventoryCycles.schoolId, schoolIds)) : eq(inventoryCycles.year, year)),
+    db.select().from(inventoryCycles).where(schoolIds ? and(eq(inventoryCycles.year, year), eq(inventoryCycles.type, type), inArray(inventoryCycles.schoolId, schoolIds)) : and(eq(inventoryCycles.year, year), eq(inventoryCycles.type, type))),
   ]);
   const cycleIds = cycleRows.map(cycle => cycle.id);
   const empty = Promise.resolve([]);
