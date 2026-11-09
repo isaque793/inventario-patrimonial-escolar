@@ -24,6 +24,7 @@ vi.mock("@/lib/trpc", () => ({
     catalog: { expenseCategories: { useQuery: () => ({ data: [] }) } },
     inventory: {
       lookupHistorical: { useQuery: () => ({ data: undefined, isFetching: false, isError: false }) },
+      findImportedItem: { useQuery: () => ({ data: null, isFetching: false, isError: false }) }, confirmImportedItem: { useMutation: () => mutation }, importPreview: { useQuery: () => ({ data: undefined, isLoading: false, isError: false }) }, importPreInventory: { useMutation: () => mutation },
       overview: { useQuery: (...args: unknown[]) => { (mocks.overviewQuery as unknown as (...queryArgs: unknown[]) => void)(...args); return { data: overview, isLoading: false, refetch: vi.fn() }; } }, createCycle: { useMutation: () => mutation }, setCommittee: { useMutation: () => mutation }, addItem: { useMutation: () => mutation }, updateItem: { useMutation: () => mutation }, deleteItem: { useMutation: () => mutation }, addIssue: { useMutation: () => mutation }, deleteIssue: { useMutation: () => mutation }, upsertNotes: { useMutation: () => mutation }, uploadDocument: { useMutation: () => mutation }, removeDocument: { useMutation: () => mutation }, submit: { useMutation: () => mutation },
     },
   },
