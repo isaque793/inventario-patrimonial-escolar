@@ -19,6 +19,7 @@ import {
   validationHistory,
   type InsertUser,
 } from "../drizzle/schema";
+import { DEFAULT_CYCLE_TYPE, type CycleType } from "@shared/inventoryCycle";
 import { ENV } from "./_core/env";
 import { hasSchoolAccess } from "./inventoryUtils";
 
@@ -300,7 +301,7 @@ export async function getCycleById(cycleId: number) {
   return rows[0];
 }
 
-export async function getSchoolOverview(schoolId: number, year: number) {
+export async function getSchoolOverview(schoolId: number, year: number, type: CycleType = DEFAULT_CYCLE_TYPE) {
   const db = await requireDb();
   const school = (await db.select().from(schools).where(eq(schools.id, schoolId)).limit(1))[0];
   if (!school) return null;
@@ -308,7 +309,7 @@ export async function getSchoolOverview(schoolId: number, year: number) {
     await db
       .select()
       .from(inventoryCycles)
-      .where(and(eq(inventoryCycles.schoolId, schoolId), eq(inventoryCycles.year, year)))
+      .where(and(eq(inventoryCycles.schoolId, schoolId), eq(inventoryCycles.year, year), eq(inventoryCycles.type, type)))
       .limit(1)
   )[0];
   if (!cycle) return { school, cycle: null, members: [], items: [], issues: [], documents: [], notes: null, history: [] };
@@ -637,10 +638,13 @@ export async function getSchoolMembers(schoolId: number) {
     .where(eq(schoolMemberships.schoolId, schoolId));
 }
 
-export async function getCyclesForSchoolIds(schoolIds: number[], year: number) {
+export async function getCyclesForSchoolIds(schoolIds: number[], year: number, type: CycleType = DEFAULT_CYCLE_TYPE) {
   if (schoolIds.length === 0) return [];
   const db = await requireDb();
-  return db.select().from(inventoryCycles).where(and(inArray(inventoryCycles.schoolId, schoolIds), eq(inventoryCycles.year, year)));
+  return db
+    .select()
+    .from(inventoryCycles)
+    .where(and(inArray(inventoryCycles.schoolId, schoolIds), eq(inventoryCycles.year, year), eq(inventoryCycles.type, type)));
 }
 
 /**

@@ -63,10 +63,13 @@ import {
   type CycleStatus,
 } from "./inventoryUtils";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { CYCLE_TYPES, DEFAULT_CYCLE_TYPE } from "@shared/inventoryCycle";
 import { createUserWithPassword, verifyUserPassword } from "./db";
 
 
 const yearInput = z.number().int().min(2020).max(2100);
+// Sem o tipo, a chamada continua sendo do pré-inventário (comportamento anterior à separação).
+const cycleTypeInput = z.enum(CYCLE_TYPES).default(DEFAULT_CYCLE_TYPE);
 const schoolInput = z.object({ schoolId: z.number().int().positive() });
 const editableCycleStatuses = ["draft", "returned"] as const;
 
@@ -323,10 +326,10 @@ export const appRouter = router({
 
   inventory: router({
     overview: protectedProcedure
-      .input(z.object({ schoolId: z.number().int().positive(), year: yearInput }))
+      .input(z.object({ schoolId: z.number().int().positive(), year: yearInput, type: cycleTypeInput }))
       .query(async ({ ctx, input }) => {
         await assertSchoolAccess(ctx.user, input.schoolId);
-        return getSchoolOverview(input.schoolId, input.year);
+        return getSchoolOverview(input.schoolId, input.year, input.type);
       }),
     lookupHistorical: protectedProcedure
       .input(z.object({ schoolId: z.number().int().positive(), propertyNumber: z.string().trim().min(1).max(80) }))
@@ -335,14 +338,15 @@ export const appRouter = router({
         return findHistoricalItem(input.schoolId, input.propertyNumber);
       }),
     createCycle: protectedProcedure
-      .input(z.object({ schoolId: z.number().int().positive(), year: yearInput }))
+      .input(z.object({ schoolId: z.number().int().positive(), year: yearInput, type: cycleTypeInput }))
       .mutation(async ({ ctx, input }) => {
         await assertSchoolAccess(ctx.user, input.schoolId);
         const db = await requireDb();
+        // Procura (ou cria) o ciclo do tipo pedido: o oficial nunca reaproveita o pré-inventário.
         const existing = await db
           .select()
           .from(inventoryCycles)
-          .where(and(eq(inventoryCycles.schoolId, input.schoolId), eq(inventoryCycles.year, input.year)))
+          .where(and(eq(inventoryCycles.schoolId, input.schoolId), eq(inventoryCycles.year, input.year), eq(inventoryCycles.type, input.type)))
           .limit(1);
         if (existing[0]) return existing[0];
         const result = await db.insert(inventoryCycles).values(input);
@@ -644,7 +648,7 @@ export const appRouter = router({
     reviewInventory: staffProcedure.input(z.object({ cycleId: z.number().int().positive() })).query(async ({ input }) => {
       const cycle = await getCycleById(input.cycleId);
       if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
-      return getSchoolOverview(cycle.schoolId, cycle.year);
+      return getSchoolOverview(cycle.schoolId, cycle.year, cycle.type);
     }),
     setUserRole: adminProcedure
       .input(z.object({ userId: z.number().int().positive(), role: z.enum(["admin", "manager", "user"]) }))
