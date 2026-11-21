@@ -64,7 +64,7 @@ import {
   type CycleStatus,
 } from "./inventoryUtils";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { CYCLE_TYPES, DEFAULT_CYCLE_TYPE } from "@shared/inventoryCycle";
+import { CYCLE_TYPES, DEFAULT_CYCLE_TYPE, describePendingConference, getConferenceProgress } from "@shared/inventoryCycle";
 import { describeImportResult, planPreInventoryImport, summarizeImportPlan, NO_PROPERTY_NUMBER } from "./preInventoryImport";
 import { createUserWithPassword, verifyUserPassword } from "./db";
 
@@ -850,11 +850,15 @@ export const appRouter = router({
       const db = await requireDb();
       // Documentos assinados são opcionais: não bloqueiam a submissão.
       const [items, members] = await Promise.all([
-        db.select({ id: inventoryItems.id }).from(inventoryItems).where(eq(inventoryItems.cycleId, cycle.id)),
+        db.select({ id: inventoryItems.id, importStatus: inventoryItems.importStatus }).from(inventoryItems).where(eq(inventoryItems.cycleId, cycle.id)),
         db.select({ id: committeeMembers.id }).from(committeeMembers).where(eq(committeeMembers.cycleId, cycle.id)),
       ]);
       if (!items.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Inclua ao menos um item patrimonial antes de submeter." });
       if (!members.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Registre ao menos um integrante da subcomissão antes de submeter." });
+      // Regra de negócio: nenhum patrimônio pode continuar aguardando conferência, seja qual for a origem.
+      // O estado é lido agora do banco; nada vindo do cliente é considerado.
+      const { pending } = getConferenceProgress(items);
+      if (pending > 0) throw new TRPCError({ code: "BAD_REQUEST", message: describePendingConference(pending) });
       await db.update(inventoryCycles).set({ status: "submitted", submittedAt: new Date(), reviewNotes: null }).where(eq(inventoryCycles.id, cycle.id));
       await db.insert(validationHistory).values({ cycleId: cycle.id, action: "submitted", note: "Inventário submetido pela escola.", performedByUserId: ctx.user.id });
       return { success: true };

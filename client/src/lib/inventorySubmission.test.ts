@@ -13,4 +13,14 @@ describe("requisitos de submissão do inventário", () => {
     expect(getInventorySubmissionRequirements({ itemCount: 1, memberCount: 1 })).toEqual({ ready: true, missing: [] });
     expect(getInventorySubmissionRequirements({ itemCount: 1, memberCount: 25 })).toEqual({ ready: true, missing: [] });
   });
+
+  it("bloqueia enquanto houver patrimônios importados aguardando conferência", () => {
+    expect(getInventorySubmissionRequirements({ itemCount: 150, memberCount: 1, pendingConfirmationCount: 30 })).toEqual({
+      ready: false,
+      missing: ["Conferir 30 patrimônios importados pendentes"],
+    });
+    expect(getInventorySubmissionRequirements({ itemCount: 150, memberCount: 1, pendingConfirmationCount: 1 }).missing).toEqual(["Conferir 1 patrimônio importado pendente"]);
+    expect(getInventorySubmissionRequirements({ itemCount: 150, memberCount: 1, pendingConfirmationCount: 0 })).toEqual({ ready: true, missing: [] });
+  });
 });
+

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
 
 const mocks = vi.hoisted(() => {
@@ -50,4 +50,29 @@ describe("inventory.submit", () => {
     expect(mocks.updates).toEqual([expect.objectContaining({ status: "submitted", reviewNotes: null, submittedAt: expect.any(Date) })]);
     expect(mocks.history).toEqual([expect.objectContaining({ cycleId: 77, action: "submitted", note: "Inventário submetido pela escola.", performedByUserId: 11 })]);
   });
+
+  describe("bloqueio por patrimônios aguardando conferência", () => {
+    const withItems = (items: unknown[]) => { mocks.selectResults.length = 0; mocks.selectResults.push(items, [{ id: 1 }]); mocks.updates.length = 0; mocks.history.length = 0; };
+
+    beforeEach(() => withItems([]));
+
+    it("bloqueia no servidor enquanto houver bem importado pendente, mesmo com subcomissão e itens", async () => {
+      withItems([{ id: 1, importStatus: "confirmed" }, { id: 2, importStatus: "pending_confirmation" }, { id: 3, importStatus: "pending_confirmation" }]);
+      await expect(appRouter.createCaller(userContext()).inventory.submit({ cycleId: 77 })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("2 patrimônios aguardando conferência") });
+      expect(mocks.updates).toEqual([]);
+      expect(mocks.history).toEqual([]);
+    });
+
+    it("usa o singular quando falta apenas um bem", async () => {
+      withItems([{ id: 1, importStatus: "pending_confirmation" }]);
+      await expect(appRouter.createCaller(userContext()).inventory.submit({ cycleId: 77 })).rejects.toMatchObject({ message: expect.stringContaining("1 patrimônio aguardando conferência") });
+    });
+
+    it("libera quando todos os importados foram conferidos, incluindo bens cadastrados manualmente", async () => {
+      withItems([{ id: 1, importStatus: "confirmed" }, { id: 2, importStatus: "confirmed" }, { id: 3, importStatus: null }]);
+      await expect(appRouter.createCaller(userContext()).inventory.submit({ cycleId: 77 })).resolves.toEqual({ success: true });
+      expect(mocks.updates).toEqual([expect.objectContaining({ status: "submitted" })]);
+    });
+  });
 });
+
