@@ -27,11 +27,11 @@ import App from "./App";
 afterEach(() => { cleanup(); window.history.pushState({}, "", "/"); });
 describe("aplicação com administrador", () => {
   for (const [path, heading] of [["/", "Escolas · Pré-inventário"], ["/gestao", "Gestão e consolidação"], ["/administradores", "Administradores da plataforma"]] as const) {
-    it(`carrega a página real ${path}`, () => {
+    it(`carrega a página real ${path}`, async () => {
       window.history.pushState({}, "", path);
       render(<App />);
       expect(screen.getByTestId("app-layout")).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: heading }, { timeout: 5000 })).toBeInTheDocument();
     });
   }
 });

@@ -3,8 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArchiveStatusPanel } from "@/components/ArchiveStatusPanel";
-import { exportPendingIssuesTemplate } from "@/lib/exportSchoolControlExcel";
-import { buildSchoolsWorkspaceInput, exportSchoolWorkspaceExcel } from "@/lib/exportSchoolWorkspaceExcel";
 import { trpc } from "@/lib/trpc";
 import { Building2, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, Loader2, Send, Users } from "lucide-react";
 import React, { useMemo, useState } from "react";
@@ -85,7 +83,7 @@ export default function ManagementExcel() {
   const dashboardQuery = trpc.management.dashboard.useQuery({ year, type: cycleType });
   const utils = trpc.useUtils();
   const [exporting, setExporting] = useState(false);
-  const categoriesQuery = trpc.catalog.expenseCategories.useQuery();
+  const categoriesQuery = trpc.catalog.expenseCategories.useQuery(undefined, { staleTime: 60 * 60_000, refetchOnWindowFocus: false });
 
   const dashboard = dashboardQuery.data;
   const categories = Object.fromEntries((categoriesQuery.data ?? []).map(category => [category.code, category.label]));
@@ -141,7 +139,8 @@ export default function ManagementExcel() {
 
   const { metrics } = dashboard;
 
-  const exportPending = () => {
+  const exportPending = async () => {
+    const { exportPendingIssuesTemplate } = await import("@/lib/exportSchoolControlExcel");
     if (!exportPendingIssuesTemplate({ rows: pendingExportRows, fileName: `registro-pendencias-${year}${cycleType === "official" ? "-inventario" : "-pre-inventario"}` })) {
       toast.info("Não existem pendências com estes filtros.");
     }
@@ -165,6 +164,7 @@ export default function ManagementExcel() {
         toast.info("Não existem escolas com patrimônio ou pendências para exportar neste período.");
         return;
       }
+      const { buildSchoolsWorkspaceInput, exportSchoolWorkspaceExcel } = await import("@/lib/exportSchoolWorkspaceExcel");
       exportSchoolWorkspaceExcel(buildSchoolsWorkspaceInput({ year, records, categoryNames: categories, issueLabels: workbookIssueLabels }));
       toast.success(records.length === 1 ? "Planilha da escola exportada." : `Resumo consolidado de ${records.length} escolas exportado.`);
     } catch (error) {

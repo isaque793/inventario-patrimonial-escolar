@@ -58,6 +58,12 @@ export function serveStatic(app: Express) {
     );
   }
 
+  // Os arquivos de /assets têm hash no nome (mudam de nome a cada build), então o navegador pode guardá-los por 1 ano.
+  app.use("/assets", express.static(path.join(distPath, "assets"), { maxAge: "1y", immutable: true }));
+  // Arquivo de /assets que não existe (ex.: aba antiga pedindo um arquivo de uma versão anterior): 404 de verdade,
+  // e não o index.html, que o navegador tentaria executar como JavaScript.
+  app.use("/assets", (_req, res) => { res.status(404).type("text/plain").send("Not found"); });
+  // index.html e demais arquivos continuam sem cache longo, para novas versões chegarem logo.
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist

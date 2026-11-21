@@ -38,7 +38,7 @@ export default function Management() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [reviewing, setReviewing] = useState<any>(null);
   const dashboardQuery = trpc.management.dashboard.useQuery({ year });
-  const categoriesQuery = trpc.catalog.expenseCategories.useQuery();
+  const categoriesQuery = trpc.catalog.expenseCategories.useQuery(undefined, { staleTime: 60 * 60_000, refetchOnWindowFocus: false });
   const dashboard = dashboardQuery.data;
   const categoryNames = Object.fromEntries((categoriesQuery.data ?? []).map(category => [category.code, category.label]));
   const availableSchools = useMemo(() => Array.from(new Map((dashboard?.pendingIssues ?? []).map((issue: any) => [String(issue.schoolId), issue.school])).entries()).map(([id, name]) => ({ id, name })), [dashboard?.pendingIssues]);

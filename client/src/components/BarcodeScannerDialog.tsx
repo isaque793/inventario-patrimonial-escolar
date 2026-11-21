@@ -1,4 +1,7 @@
-import Quagga, { QuaggaJSResultObject } from "@ericblade/quagga2";
+import type { QuaggaJSResultObject } from "@ericblade/quagga2";
+
+// O Quagga é grande: só é baixado quando o leitor de reserva realmente entra em uso.
+const loadQuagga = () => import("@ericblade/quagga2").then(module => module.default);
 import { Camera, Loader2, ScanLine, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -97,6 +100,7 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Barcode
       const accept = createConsensus();
       let active = true;
       let started = false;
+      let quagga: Awaited<ReturnType<typeof loadQuagga>> | null = null;
       const handleDetected = (result: QuaggaJSResultObject) => {
         if (!active) return;
         const code = normalizeCode(result.codeResult?.code);
@@ -107,6 +111,9 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Barcode
 
       setStatus("Solicitando permissão para usar a câmera...");
       setIsStarting(true);
+      void loadQuagga().then(Quagga => {
+      if (!active) return;
+      quagga = Quagga;
       Quagga.init({
         inputStream: {
           type: "LiveStream",
@@ -134,8 +141,14 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Barcode
         Quagga.start();
         started = true;
       });
+      }).catch(error => {
+        if (!active) return;
+        setIsStarting(false);
+        console.error("Erro ao carregar o leitor de código de barras:", error);
+        setStatus("Não foi possível carregar o leitor. Verifique a conexão ou digite o código manualmente.");
+      });
 
-      return () => { active = false; Quagga.offDetected(handleDetected); if (started) Quagga.stop(); };
+      return () => { active = false; if (quagga) { quagga.offDetected(handleDetected); if (started) quagga.stop(); } };
     };
 
     const switchToQuagga = () => {

@@ -22,11 +22,11 @@ afterEach(() => { cleanup(); window.history.pushState({}, "", "/"); });
 
 describe("rotas administrativas", () => {
   for (const [path, content] of [["/", "Conteúdo de Escolas"], ["/gestao", "Conteúdo de Gestão"], ["/administradores", "Conteúdo de Administradores"]] as const) {
-    it(`carrega ${path} para o administrador`, () => {
+    it(`carrega ${path} para o administrador`, async () => {
       window.history.pushState({}, "", path);
       render(<App />);
       expect(screen.getByTestId("layout-admin")).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: content })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: content }, { timeout: 5000 })).toBeInTheDocument();
     });
   }
 });

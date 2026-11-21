@@ -104,7 +104,7 @@ describe("exportações Excel no painel de gestão", () => {
     );
 
     fireEvent.click(buttons[1]);
-    expect(mocks.exports.pending).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.exports.pending).toHaveBeenCalledWith(
       expect.objectContaining({
         fileName: expect.stringMatching(/^registro-pendencias-/),
         rows: [
@@ -118,7 +118,7 @@ describe("exportações Excel no painel de gestão", () => {
           }),
         ],
       }),
-    );
+    ));
 
   });
 });
