@@ -154,6 +154,18 @@ describe("inventory.confirmImportedItem", () => {
     expect(mocks.state.inserted).toEqual([]);
   });
 
+  it("bem não localizado: registra a ocorrência com a justificativa e o bem passa a conferido", async () => {
+    const result = await appRouter.createCaller(userContext()).inventory.confirmImportedItem({ ...confirmInput, pending: { issueType: "not_found", pendingDescription: "Não localizado na sala 03 durante a conferência." } });
+    expect(result).toMatchObject({ id: 20, importStatus: "confirmed" });
+    expect(mocks.state.updated[0]).toMatchObject({ importStatus: "confirmed" });
+    expect(mocks.state.inserted[0][0]).toMatchObject({ itemId: 20, issueType: "not_found", pendingDescription: "Não localizado na sala 03 durante a conferência.", resolutionStatus: "open" });
+  });
+
+  it("bem não localizado sem justificativa é recusado e o bem continua pendente", async () => {
+    await expect(appRouter.createCaller(userContext()).inventory.confirmImportedItem({ ...confirmInput, pending: { issueType: "not_found", pendingDescription: " " } })).rejects.toBeTruthy();
+    expect(mocks.state.updated).toEqual([]);
+  });
+
   it("não reconfere um bem já conferido", async () => {
     mocks.state.itemQueue = [[sourceItem(20, "A", { cycleId: 2, importStatus: "confirmed" })]];
     await expect(appRouter.createCaller(userContext()).inventory.confirmImportedItem(confirmInput)).rejects.toMatchObject({ code: "CONFLICT" });
