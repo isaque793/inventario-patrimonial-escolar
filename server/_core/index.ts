@@ -1,4 +1,5 @@
 import "dotenv/config";
+import compression from "compression";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
 import net from "net";
@@ -130,6 +131,8 @@ async function startServer() {
 
   app.disable("x-powered-by");
   app.use(securityHeaders);
+  // Comprime JS, CSS, HTML e respostas da API (o servidor não fazia isso). No desenvolvimento, o Vite cuida disso.
+  if (process.env.NODE_ENV !== "development") app.use(compression());
   app.use(sameOriginForStateChangingRequests);
 
   // Configure body parser with larger size limit for file uploads

@@ -11,7 +11,10 @@ export function useAuth(options?: UseAuthOptions) {
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: true,
-    refetchInterval: 15_000,
+    // Antes consultava a cada 15 s (uma ida ao banco por consulta). Toda chamada da API já revalida a sessão no servidor,
+    // então uma suspensão de acesso vale na próxima ação do usuário; aqui basta uma conferência esporádica.
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
