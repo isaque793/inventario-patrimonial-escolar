@@ -500,10 +500,26 @@ export const appRouter = router({
         const rows = await db
           .select()
           .from(inventoryItems)
-          .where(and(eq(inventoryItems.cycleId, cycle.id), isNotNull(inventoryItems.importStatus), inArray(inventoryItems.propertyNumber, historicalPropertyNumberCandidates(input.propertyNumber))))
+          .where(and(eq(inventoryItems.cycleId, cycle.id), inArray(inventoryItems.propertyNumber, historicalPropertyNumberCandidates(input.propertyNumber))))
           .orderBy(asc(inventoryItems.id));
-        // Prefere o ainda não conferido; se só houver conferido, devolve-o para avisar que já foi conferido.
-        return rows.find(row => row.importStatus === "pending_confirmation") ?? rows[0] ?? null;
+        // Prefere o importado ainda não conferido; se não houver, retorna o registro correspondente
+        // já existente no ciclo (inclusive bens cadastrados manualmente).
+        const item = rows.find(row => row.importStatus === "pending_confirmation") ?? rows[0] ?? null;
+        if (!item) return null;
+
+        // A consulta pelo patrimônio também precisa devolver a ocorrência vinculada.
+        // O fallback pelo número preserva a leitura de pendências antigas sem itemId.
+        const linkedIssues = await db
+          .select()
+          .from(inventoryIssues)
+          .where(and(
+            eq(inventoryIssues.cycleId, cycle.id),
+            or(eq(inventoryIssues.itemId, item.id), and(isNull(inventoryIssues.itemId), inArray(inventoryIssues.propertyNumber, historicalPropertyNumberCandidates(item.propertyNumber)))),
+          ))
+          .orderBy(desc(inventoryIssues.id))
+          .limit(1);
+
+        return { ...item, linkedIssue: linkedIssues[0] ?? null };
       }),
     confirmImportedItem: protectedProcedure
       .input(
