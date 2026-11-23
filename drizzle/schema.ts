@@ -309,6 +309,7 @@ export const inventoryDocuments = mysqlTable(
       "opening_minutes",
       "responsibility_term",
       "closing_minutes",
+      "consolidated",
     ]).notNull(),
     fileName: varchar("fileName", { length: 255 }).notNull(),
     mimeType: varchar("mimeType", { length: 120 }).notNull(),
