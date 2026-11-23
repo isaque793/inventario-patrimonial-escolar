@@ -383,7 +383,7 @@ function ItemDialog({ schoolId, cycleId, cycleType, open, onOpenChange, item, is
   }, [historicalQuery.data, historicalQuery.isFetching, historicalQuery.isError, lookupNumber, historicalEnabled]);
 
   // No inventário oficial, ler/digitar o patrimônio procura primeiro o bem importado ainda não conferido.
-  const importedEnabled = cycleType === "official" && historicalEnabled && Boolean(lookupNumber) && cycleId != null;
+  const importedEnabled = historicalEnabled && Boolean(lookupNumber) && cycleId != null;
   const importedQuery = trpc.inventory.findImportedItem.useQuery(
     { cycleId: cycleId ?? 0, propertyNumber: lookupNumber },
     { enabled: importedEnabled, retry: false, refetchOnWindowFocus: false },
