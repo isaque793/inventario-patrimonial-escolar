@@ -767,6 +767,15 @@ export const appRouter = router({
               // A edição de um bem sem ocorrência anterior também pode criar a primeira pendência.
               await tx.insert(inventoryIssues).values({ cycleId: cycle.id, ...pendingFields });
             }
+
+            // Registrar formalmente que um bem importado não foi localizado conclui sua conferência.
+            if (pending.issueType === "not_found" && item[0].importStatus === "pending_confirmation") {
+              await tx.update(inventoryItems).set({
+                importStatus: "confirmed",
+                confirmedAt: new Date(),
+                confirmedBy: ctx.user.id,
+              }).where(eq(inventoryItems.id, itemId));
+            }
           }
         });
         return { id: itemId, totalValue };
