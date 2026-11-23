@@ -189,8 +189,9 @@ function SchoolWorkspace({ cycleType, year, setYear, isManager, viewerId }: { cy
     return Array.from(grouped.values()).sort((a, b) => a.expenseCode.localeCompare(b.expenseCode, undefined, { numeric: true }));
   }, [overview?.items, categoriesQuery.data]);
   const documentTypes = new Set(overview?.documents?.map((document: any) => document.documentType));
-  // Progresso: ciclo iniciado, subcomissão e itens (documentos assinados são opcionais).
-  const completionSteps = [Boolean(cycle), (overview?.members?.length ?? 0) >= 1, (overview?.items?.length ?? 0) > 0];
+  // No inventário oficial, cada documento assinado obrigatório também compõe o progresso.
+  const requiredOfficialDocumentTypes = ["opening_minutes", "responsibility_term", "closing_minutes", "consolidated"];
+  const completionSteps = [Boolean(cycle), (overview?.members?.length ?? 0) >= 1, (overview?.items?.length ?? 0) > 0, ...(cycleType === "official" ? requiredOfficialDocumentTypes.map(type => documentTypes.has(type)) : [])];
   const completion = completionSteps.filter(Boolean).length;
   const conference = getConferenceProgress(overview?.items ?? []);
   const submissionRequirements = getInventorySubmissionRequirements({ itemCount: overview?.items?.length ?? 0, memberCount: overview?.members?.length ?? 0, pendingConfirmationCount: conference.pending, documentTypes: overview?.documents?.map((document: any) => document.documentType) ?? [], requireDocuments: cycleType === "official" });
