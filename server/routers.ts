@@ -849,7 +849,7 @@ export const appRouter = router({
       .input(
         z.object({
           cycleId: z.number().int().positive(),
-          documentType: z.enum(["opening_minutes", "responsibility_term", "closing_minutes"]),
+          documentType: z.enum(["opening_minutes", "responsibility_term", "closing_minutes", "consolidated"]),
           fileName: z.string().trim().min(1).max(255),
           mimeType: z.enum(["application/pdf", "image/jpeg", "image/png"]),
           contentBase64: z.string().min(1).max(14_000_000),
@@ -857,6 +857,9 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         const cycle = await assertEditableCycle(ctx.user, input.cycleId);
+        if (input.documentType === "consolidated" && cycle.type !== "official") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "O documento Consolidado só pode ser enviado no inventário oficial." });
+        }
         const fileBuffer = Buffer.from(input.contentBase64, "base64");
         if (!fileBuffer.length || fileBuffer.length > 10 * 1024 * 1024) {
           throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Envie ficheiros de até 10 MB." });
@@ -879,13 +882,27 @@ export const appRouter = router({
     submit: protectedProcedure.input(z.object({ cycleId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const cycle = await assertEditableCycle(ctx.user, input.cycleId);
       const db = await requireDb();
-      // Documentos assinados são opcionais: não bloqueiam a submissão.
-      const [items, members] = await Promise.all([
+      // A validação é feita no servidor: no inventário oficial, os quatro documentos assinados são obrigatórios.
+      const [items, members, documents] = await Promise.all([
         db.select({ id: inventoryItems.id, importStatus: inventoryItems.importStatus }).from(inventoryItems).where(eq(inventoryItems.cycleId, cycle.id)),
         db.select({ id: committeeMembers.id }).from(committeeMembers).where(eq(committeeMembers.cycleId, cycle.id)),
+        db.select({ documentType: inventoryDocuments.documentType }).from(inventoryDocuments).where(eq(inventoryDocuments.cycleId, cycle.id)),
       ]);
       if (!items.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Inclua ao menos um item patrimonial antes de submeter." });
       if (!members.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Registre ao menos um integrante da subcomissão antes de submeter." });
+      if (cycle.type === "official") {
+        const uploadedTypes = new Set(documents.map(document => document.documentType));
+        const requiredDocuments = [
+          ["opening_minutes", "Ata de Abertura"],
+          ["responsibility_term", "Termo de Responsabilidade"],
+          ["closing_minutes", "Ata de Encerramento"],
+          ["consolidated", "Consolidado"],
+        ] as const;
+        const missingDocuments = requiredDocuments.filter(([type]) => !uploadedTypes.has(type)).map(([, label]) => label);
+        if (missingDocuments.length) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Envie os quatro documentos assinados antes de submeter. Faltam: ${missingDocuments.join(", ")}.` });
+        }
+      }
       // Regra de negócio: nenhum patrimônio pode continuar aguardando conferência, seja qual for a origem.
       // O estado é lido agora do banco; nada vindo do cliente é considerado.
       const { pending } = getConferenceProgress(items);
