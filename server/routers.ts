@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   committeeMembers,
@@ -494,16 +494,31 @@ export const appRouter = router({
         const cycle = await getCycleById(input.cycleId);
         if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
         await assertSchoolAccess(ctx.user, cycle.schoolId);
-        if (cycle.type !== "official") return null;
         const db = await requireDb();
         // Só procura neste ciclo oficial (e, portanto, só nesta escola): nunca em outro ciclo.
         const rows = await db
           .select()
           .from(inventoryItems)
-          .where(and(eq(inventoryItems.cycleId, cycle.id), isNotNull(inventoryItems.importStatus), inArray(inventoryItems.propertyNumber, historicalPropertyNumberCandidates(input.propertyNumber))))
+          .where(and(eq(inventoryItems.cycleId, cycle.id), inArray(inventoryItems.propertyNumber, historicalPropertyNumberCandidates(input.propertyNumber))))
           .orderBy(asc(inventoryItems.id));
-        // Prefere o ainda não conferido; se só houver conferido, devolve-o para avisar que já foi conferido.
-        return rows.find(row => row.importStatus === "pending_confirmation") ?? rows[0] ?? null;
+        // Prefere o importado ainda não conferido; se não houver, retorna o registro correspondente
+        // já existente no ciclo (inclusive bens cadastrados manualmente).
+        const item = rows.find(row => row.importStatus === "pending_confirmation") ?? rows[0] ?? null;
+        if (!item) return null;
+
+        // A consulta pelo patrimônio também precisa devolver a ocorrência vinculada.
+        // O fallback pelo número preserva a leitura de pendências antigas sem itemId.
+        const linkedIssues = await db
+          .select()
+          .from(inventoryIssues)
+          .where(and(
+            eq(inventoryIssues.cycleId, cycle.id),
+            or(eq(inventoryIssues.itemId, item.id), and(isNull(inventoryIssues.itemId), inArray(inventoryIssues.propertyNumber, historicalPropertyNumberCandidates(item.propertyNumber)))),
+          ))
+          .orderBy(desc(inventoryIssues.id))
+          .limit(1);
+
+        return { ...item, linkedIssue: linkedIssues[0] ?? null };
       }),
     confirmImportedItem: protectedProcedure
       .input(
