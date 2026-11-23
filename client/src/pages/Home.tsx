@@ -352,12 +352,6 @@ function ItemDialog({ schoolId, cycleId, cycleType, open, onOpenChange, item, is
     }
   }, [open, item, issue]);
 
-  useEffect(() => {
-    if (!open || !importedFound?.linkedIssue || issue) return;
-    setPendingType(importedFound.linkedIssue.issueType ?? "not_found");
-    setIssueStatus(importedFound.linkedIssue.resolutionStatus ?? "open");
-  }, [open, importedFound?.linkedIssue, issue]);
-
   // Espera o usuário parar de digitar antes de consultar o histórico.
   useEffect(() => {
     if (!historicalEnabled) return;
@@ -400,6 +394,13 @@ function ItemDialog({ schoolId, cycleId, cycleType, open, onOpenChange, item, is
   const displayedIssue = issue ?? importedFound?.linkedIssue ?? null;
   const alreadyRegistered = Boolean(importedFound && importedFound.importStatus == null && !item);
   const base = item ?? imported ?? (alreadyConfirmed || alreadyRegistered ? importedFound : null);
+
+  useEffect(() => {
+    if (!open || !importedFound?.linkedIssue || issue) return;
+    setPendingType(importedFound.linkedIssue.issueType ?? "not_found");
+    setIssueStatus(importedFound.linkedIssue.resolutionStatus ?? "open");
+  }, [open, importedFound?.linkedIssue, issue]);
+
 
   const historicalStatus: "idle" | "loading" | "found" | "not_found" | "error" = !historicalEnabled || !lookupNumber
     ? "idle"
