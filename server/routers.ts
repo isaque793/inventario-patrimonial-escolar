@@ -691,12 +691,12 @@ export const appRouter = router({
           unitValue: z.number().min(0).max(999999999),
           currentSituation: z.string().trim().min(2).max(160),
           pending: z.object({
-            issueId: z.number().int().positive(),
+            issueId: z.number().int().positive().optional(),
             issueType: z.enum(["not_found", "outside_register", "new_equipment", "transfer", "donation", "guard_term", "other"]),
             pendingDescription: z.string().trim().min(2).max(4000),
             sei: z.string().trim().max(120).optional().nullable(),
             measuresTaken: z.string().trim().max(4000).optional().nullable(),
-            resolutionStatus: z.enum(["open", "in_progress", "resolved"]),
+            resolutionStatus: z.enum(["open", "in_progress", "resolved"]).optional(),
           }).optional().nullable(),
         }),
       )
@@ -746,20 +746,36 @@ export const appRouter = router({
           await tx.update(inventoryIssues).set(itemCopy).where(and(eq(inventoryIssues.cycleId, cycle.id), eq(inventoryIssues.itemId, itemId)));
 
           if (pending) {
-            const issue = await tx.select().from(inventoryIssues).where(eq(inventoryIssues.id, pending.issueId)).limit(1);
-            if (!issue[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Pendência não encontrada." });
-            if (issue[0].cycleId !== cycle.id) throw accessDenied();
-            // Pendências antigas sem vínculo passam a apontar para este bem.
-            if (issue[0].itemId != null && issue[0].itemId !== itemId) throw accessDenied();
-            await tx.update(inventoryIssues).set({
+            const pendingFields = {
               ...itemCopy,
               itemId,
               issueType: pending.issueType,
               pendingDescription: pending.pendingDescription,
               sei: pending.sei ?? null,
               measuresTaken: pending.measuresTaken ?? null,
-              resolutionStatus: pending.resolutionStatus,
-            }).where(eq(inventoryIssues.id, pending.issueId));
+              resolutionStatus: pending.resolutionStatus ?? "open" as const,
+            };
+
+            if (pending.issueId) {
+              const issue = await tx.select().from(inventoryIssues).where(eq(inventoryIssues.id, pending.issueId)).limit(1);
+              if (!issue[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Pendência não encontrada." });
+              if (issue[0].cycleId !== cycle.id) throw accessDenied();
+              // Pendências antigas sem vínculo passam a apontar para este bem.
+              if (issue[0].itemId != null && issue[0].itemId !== itemId) throw accessDenied();
+              await tx.update(inventoryIssues).set(pendingFields).where(eq(inventoryIssues.id, pending.issueId));
+            } else {
+              // A edição de um bem sem ocorrência anterior também pode criar a primeira pendência.
+              await tx.insert(inventoryIssues).values({ cycleId: cycle.id, ...pendingFields });
+            }
+
+            // Registrar formalmente que um bem importado não foi localizado conclui sua conferência.
+            if (pending.issueType === "not_found" && item[0].importStatus === "pending_confirmation") {
+              await tx.update(inventoryItems).set({
+                importStatus: "confirmed",
+                confirmedAt: new Date(),
+                confirmedBy: ctx.user.id,
+              }).where(eq(inventoryItems.id, itemId));
+            }
           }
         });
         return { id: itemId, totalValue };
