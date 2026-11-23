@@ -494,7 +494,6 @@ export const appRouter = router({
         const cycle = await getCycleById(input.cycleId);
         if (!cycle) throw new TRPCError({ code: "NOT_FOUND", message: "Ciclo de inventário não encontrado." });
         await assertSchoolAccess(ctx.user, cycle.schoolId);
-        if (cycle.type !== "official") return null;
         const db = await requireDb();
         // Só procura neste ciclo oficial (e, portanto, só nesta escola): nunca em outro ciclo.
         const rows = await db
